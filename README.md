@@ -51,6 +51,7 @@ Initial workflow:
 - `POST /api/v1/conversations/{id}/authorize-context` — explicitly authorize context use
 - `POST /api/v1/conversations/{id}/messages` — add a message only after authorization
 - `GET /api/v1/conversations/{id}/messages` — read authorized messages
+- `POST /api/v1/conversations/{id}/sales-assist` — analyze authorized messages and generate a human-reviewed sales reply draft
 
 Interactive API documentation: `/docs`.
 
@@ -81,4 +82,4 @@ Load the extension in desktop Chrome:
 - Tenant ownership is checked server-side for customer and conversation operations.
 
 ## Current limitations
-This is an early MVP backend, not production-ready. It still needs account recovery, rate limiting, stronger production secret management, audit logging, team invitations, automated tenant-isolation integration tests, AI Gateway integration, customer memory APIs, and the WhatsApp extension context adapter. GitHub Actions must pass before calling the current code validated. The backend has not yet been deployed to a public service.
+This is an early MVP backend, not production-ready. It still needs account recovery, rate limiting, stronger production secret management, audit logging, team invitations, automated tenant-isolation integration tests, customer memory APIs, and the WhatsApp extension context adapter. GitHub Actions must pass before calling the current code validated. The backend has not yet been deployed to a public service.
