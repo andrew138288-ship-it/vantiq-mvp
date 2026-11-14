@@ -61,3 +61,33 @@ class CustomerPublic(BaseModel):
     notes: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class ConversationCreate(BaseModel):
+    customer_id: uuid.UUID
+    channel: str = Field(default="whatsapp", min_length=1, max_length=32)
+
+
+class ConversationPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    customer_id: uuid.UUID
+    channel: str
+    context_version: int
+    context_authorized_at: datetime | None
+    is_active: bool
+    created_at: datetime
+
+
+class MessageCreate(BaseModel):
+    direction: str = Field(pattern="^(inbound|outbound)$")
+    body: str = Field(min_length=1, max_length=12000)
+
+
+class MessagePublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    direction: str
+    body: str
+    source: str
+    created_at: datetime
