@@ -10,10 +10,10 @@ Deliver a small, testable Chrome extension for 2–3 pilot users, using WhatsApp
 
 Initial workflow:
 1. The user explicitly selects and authorizes the current conversation context.
-2. VANTIQ analyzes the supplied context and configured commercial facts.
-3. The backend returns sales insights, strategy options, and reply drafts.
-4. The user reviews, edits, copies, and manually sends the message.
-5. Approved interaction summaries can update customer memory.
+2. VANTIQ stores only the context the user has authorized.
+3. The backend analyzes the supplied context and configured commercial facts.
+4. The user reviews, edits, copies, and manually sends any proposed reply.
+5. Approved interaction summaries can later update customer memory.
 
 ## In scope
 - Universal sales intelligence and decision support
@@ -27,25 +27,42 @@ Initial workflow:
 - Brand management
 - ERP, MES, WMS, manufacturing, or factory operations
 
-## Current implementation
-- Chrome Extension Manifest V3 bootstrap side panel with backend health check
-- FastAPI backend with database-aware health endpoint
-- PostgreSQL 16 local service
-- SQLAlchemy 2.x core models and Alembic initial migration
-- Core tables: tenants, users, tenant memberships, customers, conversations, messages, customer memories
-- GitHub Actions backend CI for syntax validation, migration execution, and schema tests
+## Implemented backend foundation
+- FastAPI modular monolith and PostgreSQL 16
+- SQLAlchemy 2.x models and Alembic migrations
+- User registration and login with Argon2 password hashing
+- JWT bearer authentication and active tenant-membership verification
+- Tenant-scoped customer create/list/read/update APIs
+- Conversation creation tied to a customer in the authenticated tenant
+- Separate explicit context-authorization endpoint before message ingestion
+- Tenant-scoped message ingestion and retrieval after authorization
+- GitHub Actions CI for Python syntax, database migrations, schema tests, and security utility tests
 
-Authentication, tenant authorization enforcement, business APIs, AI Gateway, WhatsApp DOM adapter, and durable memory workflows are not yet implemented.
+## API endpoints
+
+- `POST /api/v1/auth/register` — create a user and first workspace
+- `POST /api/v1/auth/login` — authenticate and receive a bearer token
+- `GET /api/v1/auth/me` — inspect the authenticated user/workspace
+- `POST /api/v1/customers` — create a customer
+- `GET /api/v1/customers` — list customers in the current tenant
+- `GET /api/v1/customers/{customer_id}` — read a tenant-owned customer
+- `PATCH /api/v1/customers/{customer_id}` — update a tenant-owned customer
+- `POST /api/v1/conversations` — create a conversation for a tenant-owned customer
+- `POST /api/v1/conversations/{id}/authorize-context` — explicitly authorize context use
+- `POST /api/v1/conversations/{id}/messages` — add a message only after authorization
+- `GET /api/v1/conversations/{id}/messages` — read authorized messages
+
+Interactive API documentation: `/docs`.
 
 ## Run locally
 
 Requirements: Docker Compose.
 
 1. Copy `.env.example` to `.env`.
-2. Run `docker compose up --build`.
-3. The API container waits for PostgreSQL, runs `alembic upgrade head`, then starts FastAPI.
+2. Replace `JWT_SECRET` with a long random secret before using real accounts.
+3. Run `docker compose up --build`.
 4. Check `http://localhost:8000/health` and confirm `database: connected`.
-5. Open API docs at `http://localhost:8000/docs`.
+5. Open `http://localhost:8000/docs`.
 
 Load the extension in desktop Chrome:
 1. Open `chrome://extensions`.
@@ -58,10 +75,10 @@ Load the extension in desktop Chrome:
 - Do not call hidden WhatsApp endpoints or unofficial WhatsApp APIs.
 - Do not bulk-read chats or contacts.
 - No automatic message sending; the user reviews and manually sends.
+- Context ingestion is blocked until the user explicitly authorizes that conversation.
 - Treat page content as untrusted data, not instructions.
 - Never commit real secrets. Public repositories must contain placeholders only.
-- Tenant-owned records carry a tenant ID; API-level tenant authorization must be implemented before exposing customer data.
+- Tenant ownership is checked server-side for customer and conversation operations.
 
-## Project status
-
-The database foundation and initial migration are committed, but have not yet been run in a local environment in this development session. GitHub Actions is configured to validate the migration and schema tests. This is still an MVP development scaffold, not a production-ready product.
+## Current limitations
+This is an early MVP backend, not production-ready. It still needs account recovery, rate limiting, stronger production secret management, audit logging, team invitations, automated tenant-isolation integration tests, AI Gateway integration, customer memory APIs, and the WhatsApp extension context adapter. GitHub Actions must pass before calling the current code validated. The backend has not yet been deployed to a public service.
