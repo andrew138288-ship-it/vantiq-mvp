@@ -44,6 +44,8 @@ async def sales_assist(
             Customer.tenant_id == principal["tenant_id"],
         )
     )
+    if customer is None:
+        raise HTTPException(status_code=404, detail="Customer not found")
     messages = list(
         db.scalars(
             select(Message)
@@ -67,8 +69,10 @@ async def sales_assist(
         f"Preferred locale: {customer.preferred_locale or 'not specified'}\n"
         f"Customer notes: {customer.notes or 'none'}\n"
     )
-    bounded_context = (customer_context + "\\n" + transcript)[-24000:]\n    try:\n        suggestion, model = await generate_sales_assist(
-            conversation_text=customer_context + "\n" + transcript,
+    bounded_context = (customer_context + "\n" + transcript)[-24000:]
+    try:
+        suggestion, model = await generate_sales_assist(
+            conversation_text=bounded_context,
             response_locale=payload.response_locale,
             sales_goal=payload.sales_goal,
         )
