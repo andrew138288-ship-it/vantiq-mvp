@@ -1,12 +1,13 @@
 from fastapi import FastAPI
 from sqlalchemy import text
 from .db import engine, settings
-from .routers import auth, customers, conversations
+from .routers import auth, customers, conversations, ai
 
 app = FastAPI(title=settings.app_name, version="0.4.0")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(customers.router, prefix="/api/v1")
 app.include_router(conversations.router, prefix="/api/v1")
+app.include_router(ai.router, prefix="/api/v1")
 
 
 @app.get("/health")
