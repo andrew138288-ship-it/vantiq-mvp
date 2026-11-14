@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from ..db import get_settings if False else settings
+from ..db import settings
 from ..dependencies import get_db, get_current_principal
 from ..models import Tenant, User, TenantMembership
 from ..schemas import RegisterRequest, LoginRequest, TokenResponse, UserPublic
@@ -33,8 +33,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         db.flush()
         db.add(user)
         db.flush()
-        membership = TenantMembership(tenant_id=tenant.id, user_id=user.id, role="owner")
-        db.add(membership)
+        db.add(TenantMembership(tenant_id=tenant.id, user_id=user.id, role="owner"))
         db.commit()
         db.refresh(user)
     except IntegrityError:
@@ -43,10 +42,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     token = create_access_token(user_id=str(user.id), tenant_id=str(tenant.id), role="owner")
     return TokenResponse(
         access_token=token,
-        user=UserPublic(
-            id=user.id, email=user.email, display_name=user.display_name,
-            tenant_id=tenant.id, role="owner"
-        ),
+        user=UserPublic(id=user.id, email=user.email, display_name=user.display_name, tenant_id=tenant.id, role="owner"),
     )
 
 
@@ -61,15 +57,10 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     )
     if membership is None:
         raise HTTPException(status_code=403, detail="No workspace membership is available")
-    token = create_access_token(
-        user_id=str(user.id), tenant_id=str(membership.tenant_id), role=membership.role
-    )
+    token = create_access_token(user_id=str(user.id), tenant_id=str(membership.tenant_id), role=membership.role)
     return TokenResponse(
         access_token=token,
-        user=UserPublic(
-            id=user.id, email=user.email, display_name=user.display_name,
-            tenant_id=membership.tenant_id, role=membership.role
-        ),
+        user=UserPublic(id=user.id, email=user.email, display_name=user.display_name, tenant_id=membership.tenant_id, role=membership.role),
     )
 
 
