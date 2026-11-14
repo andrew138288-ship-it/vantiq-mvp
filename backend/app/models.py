@@ -55,6 +55,7 @@ class Conversation(Base):
     customer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
     channel: Mapped[str] = mapped_column(String(32), nullable=False, default="whatsapp")
     context_version: Mapped[int] = mapped_column(nullable=False, default=1)
+    context_authorized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
