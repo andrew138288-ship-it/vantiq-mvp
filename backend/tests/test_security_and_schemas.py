@@ -49,3 +49,30 @@ def test_registration_rejects_short_password():
 def test_message_direction_is_restricted():
     with pytest.raises(ValidationError):
         MessageCreate(direction="system", body="This direction is not allowed")
+
+def test_alembic_revision_ids_fit_version_column_and_form_single_chain():
+    from pathlib import Path
+    import ast
+
+    migration_dir = Path("migrations/versions")
+    revisions = {}
+    for migration_file in sorted(migration_dir.glob("*.py")):
+        if migration_file.name == "__init__.py":
+            continue
+        tree = ast.parse(migration_file.read_text(encoding="utf-8"))
+        values = {}
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+                if node.targets[0].id in {"revision", "down_revision"}:
+                    values[node.targets[0].id] = ast.literal_eval(node.value)
+        revision = values.get("revision")
+        assert isinstance(revision, str) and len(revision) <= 32, f"{migration_file.name}: invalid Alembic revision"
+        assert revision not in revisions, f"duplicate revision: {revision}"
+        revisions[revision] = values.get("down_revision")
+
+    assert revisions, "no Alembic migrations found"
+    roots = [revision for revision, parent in revisions.items() if parent is None]
+    assert len(roots) == 1, f"expected one migration root, got {roots}"
+    for revision, parent in revisions.items():
+        if parent is not None:
+            assert parent in revisions, f"{revision} references missing parent {parent}"
