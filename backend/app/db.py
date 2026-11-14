@@ -3,6 +3,15 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def normalize_database_url(url: str) -> str:
+    """Normalize provider URLs to the psycopg 3 SQLAlchemy dialect."""
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg://" + url[len("postgres://"):]
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url[len("postgresql://"):]
+    return url
+
+
 class Settings(BaseSettings):
     app_name: str = "VANTIQ API"
     app_env: str = "development"
@@ -15,7 +24,7 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-engine = create_engine(settings.database_url, pool_pre_ping=True)
+engine = create_engine(normalize_database_url(settings.database_url), pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
