@@ -1,0 +1,42 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: vantiq
+          POSTGRES_USER: vantiq
+          POSTGRES_PASSWORD: vantiq_local_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vantiq -d vantiq"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://vantiq:vantiq_local_only@localhost:5432/vantiq
+      APP_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r backend/requirements.txt pytest
+      - name: Validate Python syntax
+        run: python -m compileall -q backend/app backend/migrations
+      - name: Apply database migrations
+        working-directory: backend
+        run: alembic upgrade head
+      - name: Validate core schema
+        working-directory: backend
+        run: pytest -q
