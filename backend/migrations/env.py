@@ -12,7 +12,7 @@ database_url = os.getenv(
     "DATABASE_URL",
     "postgresql+psycopg://vantiq:vantiq_local_only@db:5432/vantiq",
 )
-config.set_main_option("sqlalchemy.url", normalize_database_url(database_url))
+config.set_main_option("sqlalchemy.url", normalize_database_url(database_url).replace("%", "%%"))
 target_metadata = Base.metadata
 
 
