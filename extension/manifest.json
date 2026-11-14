@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "VANTIQ — World-Class Sales AI",
+  "version": "0.1.0",
+  "description": "A human-reviewed sales intelligence side panel.",
+  "permissions": ["sidePanel", "activeTab"],
+  "host_permissions": [
+    "https://web.whatsapp.com/*",
+    "http://localhost:8000/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "Open VANTIQ"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
