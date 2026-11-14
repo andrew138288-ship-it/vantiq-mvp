@@ -2,7 +2,7 @@
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0003_conversation_context_authorization"
+revision = "0003_context_authorization"
 down_revision = "0002_user_password_hash"
 branch_labels = None
 depends_on = None
