@@ -13,3 +13,27 @@ def test_sales_instructions_protect_against_prompt_injection():
 def test_sales_instructions_do_not_assume_sales_goal():
     instructions = build_sales_instructions("en-US", None)
     assert "Advance the conversation helpfully without pressure." in instructions
+
+
+def test_portuguese_variants_remain_distinct():
+    brazil = build_sales_instructions("pt-BR", None)
+    portugal = build_sales_instructions("pt-PT", None)
+    assert "pt-BR" in brazil
+    assert "pt-PT" in portugal
+    assert brazil != portugal
+
+
+def test_missing_api_key_fails_closed(monkeypatch):
+    import asyncio
+    import pytest
+    from app.db import settings
+    from app.services.ai_gateway import AIProviderNotConfigured, generate_sales_assist
+
+    monkeypatch.setattr(settings, "openai_api_key", None)
+    with pytest.raises(AIProviderNotConfigured):
+        asyncio.run(
+            generate_sales_assist(
+                conversation_text="Customer: Hello",
+                response_locale="en-US",
+            )
+        )
