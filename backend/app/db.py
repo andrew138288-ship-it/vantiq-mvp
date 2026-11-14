@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://vantiq:vantiq_local_only@localhost:5432/vantiq"
     jwt_secret: str = "CHANGE_THIS_LOCAL_DEVELOPMENT_SECRET_BEFORE_DEPLOYMENT"
     access_token_minutes: int = 60
+    openai_api_key: str | None = None
+    openai_model: str = "gpt-6-astra"
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
