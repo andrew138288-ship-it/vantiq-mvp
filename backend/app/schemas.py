@@ -91,3 +91,16 @@ class MessagePublic(BaseModel):
     body: str
     source: str
     created_at: datetime
+
+
+class SalesAssistRequest(BaseModel):
+    response_locale: str = Field(default="en-US", min_length=2, max_length=16)
+    sales_goal: str | None = Field(default=None, max_length=500)
+
+
+class SalesAssistResponse(BaseModel):
+    conversation_id: uuid.UUID
+    suggestion: str
+    model: str
+    generated_at: datetime
+    requires_human_review: bool = True
