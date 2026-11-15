@@ -4,13 +4,13 @@ export function parseTranscript(value) {
   const input = String(value ?? "").trim();
   if (!input) return [];
 
-  const lines = input.split(/\\r?\\n/);
+  const lines = input.split(/\r?\n/);
   const entries = [];
   let current = null;
   let sawSpeakerLabel = false;
 
   for (const line of lines) {
-    const match = line.match(/^\\s*(Customer|Salesperson)\\s*:\\s?(.*)$/i);
+    const match = line.match(/^\s*(Customer|Salesperson)\s*:\s?(.*)$/i);
     if (match) {
       sawSpeakerLabel = true;
       if (current && current.body.trim()) entries.push(current);
@@ -19,7 +19,7 @@ export function parseTranscript(value) {
         body: match[2],
       };
     } else if (current) {
-      current.body += (current.body ? "\\n" : "") + line;
+      current.body += (current.body ? "\n" : "") + line;
     } else if (line.trim()) {
       current = { direction: "inbound", body: line };
     }
@@ -27,8 +27,7 @@ export function parseTranscript(value) {
 
   if (current && current.body.trim()) entries.push(current);
   if (!sawSpeakerLabel) {
-    const body = input;
-    return body ? [{ direction: "inbound", body }] : [];
+    return input ? [{ direction: "inbound", body: input }] : [];
   }
   return entries.map(({ direction, body }) => ({ direction, body: body.trim() })).filter((entry) => entry.body);
 }
