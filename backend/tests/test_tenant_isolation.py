@@ -202,7 +202,7 @@ def test_authentication_rejects_invalid_tokens(isolated_client, token_kind):
             "role": "owner",
             "exp": datetime.now(timezone.utc) - timedelta(minutes=1),
         }
-        secret = "incorrect-test-secret" if token_kind == "wrong_signature" else settings.jwt_secret
+        secret = "incorrect-test-secret-key-with-32-bytes-minimum" if token_kind == "wrong_signature" else settings.jwt_secret
         token = jwt.encode(claims, secret, algorithm="HS256")
 
     response = client.get(
