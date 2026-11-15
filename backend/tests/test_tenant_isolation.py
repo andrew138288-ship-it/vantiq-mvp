@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import uuid
 
 import jwt
 import pytest
@@ -221,7 +222,7 @@ def test_deactivated_user_cannot_reuse_existing_token(isolated_client):
     client, token, ids, session_factory = isolated_client
     db = session_factory()
     try:
-        user = db.get(User, ids["user_a"])
+        user = db.get(User, uuid.UUID(ids["user_a"]))
         user.is_active = False
         db.commit()
     finally:
