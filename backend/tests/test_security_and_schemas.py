@@ -93,3 +93,27 @@ def test_alembic_revision_ids_fit_version_column_and_form_single_chain():
     for revision, parent in revisions.items():
         if parent is not None:
             assert parent in revisions, f"{revision} references missing parent {parent}"
+
+
+def test_production_settings_reject_default_jwt_secret():
+    from app.db import Settings
+
+    with pytest.raises(ValidationError, match="Production requires JWT_SECRET"):
+        Settings(app_env="production")
+
+
+def test_production_settings_reject_short_jwt_secret():
+    from app.db import Settings
+
+    with pytest.raises(ValidationError, match="Production requires JWT_SECRET"):
+        Settings(app_env="production", jwt_secret="too-short-secret")
+
+
+def test_production_settings_accept_strong_explicit_jwt_secret():
+    from app.db import Settings
+
+    configured = Settings(
+        app_env="production",
+        jwt_secret="a-secure-test-secret-with-more-than-32-characters",
+    )
+    assert configured.app_env == "production"
