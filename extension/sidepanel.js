@@ -9,6 +9,10 @@ const loginButton = document.querySelector("#login-button");
 const authStatus = document.querySelector("#auth-status");
 const accountName = document.querySelector("#account-name");
 const customerList = document.querySelector("#customer-list");
+const customerSelect = document.querySelector("#customer-select");
+const analyzeButton = document.querySelector("#analyze");
+const analysisStatus = document.querySelector("#analysis-status");
+const decisionResult = document.querySelector("#decision-result");
 const workspacePicker = document.querySelector("#workspace-picker");
 const workspaceSelect = document.querySelector("#workspace-id");
 
@@ -19,7 +23,8 @@ function apiBase() {
 async function apiRequest(path, options = {}, token = null) {
   const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
   if (token) headers.Authorization = `Bearer ${token}`;
-  const response = await fetch(`${apiBase()}${path}`, { ...options, headers });
+  const apiPath = path === "/health" ? path : `/api/v1${path}`;
+  const response = await fetch(`${apiBase()}${apiPath}`, { ...options, headers });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     const detail = typeof body.detail === "string" ? body.detail : body.detail?.message;
@@ -44,10 +49,11 @@ async function showSignedOut(message = "") {
 
 async function loadCustomers(token) {
   customerList.replaceChildren();
+  customerSelect.replaceChildren(new Option("Select a customer", ""));
   const customers = await apiRequest("/customers?limit=50", {}, token);
   if (!customers.length) {
     const item = document.createElement("li");
-    item.textContent = "No customers in this workspace yet.";
+    item.textContent = "No customers in this workspace yet. Add customers through the VANTIQ API first.";
     customerList.append(item);
     return;
   }
@@ -56,12 +62,8 @@ async function loadCustomers(token) {
     const name = document.createElement("strong");
     name.textContent = customer.display_name;
     item.append(name);
-    if (customer.company) {
-      const company = document.createElement("span");
-      company.textContent = ` — ${customer.company}`;
-      item.append(company);
-    }
     customerList.append(item);
+    customerSelect.add(new Option(customer.display_name, customer.id));
   }
 }
 
@@ -146,3 +148,106 @@ document.querySelector("#logout").addEventListener("click", async () => {
 
 apiInput.value = DEFAULT_API_URL;
 restoreSession();
+
+analyzeButton.addEventListener("click", async () => {
+  const session = await readSession();
+  const customerId = customerSelect.value;
+  const transcript = document.querySelector("#transcript").value.trim();
+  const authorized = document.querySelector("#context-consent").checked;
+  if (!session) return showSignedOut("Please sign in again.");
+  if (!customerId) {
+    analysisStatus.textContent = "Select a customer first.";
+    return;
+  }
+  if (!transcript) {
+    analysisStatus.textContent = "Paste the conversation context first.";
+    return;
+  }
+  if (!authorized) {
+    analysisStatus.textContent = "Confirm your authorization before sharing conversation context.";
+    return;
+  }
+
+  analyzeButton.disabled = true;
+  decisionResult.hidden = true;
+  analysisStatus.textContent = "Creating an authorized conversation and analyzing…";
+  try {
+    const conversation = await apiRequest("/conversations", {
+      method: "POST",
+      body: JSON.stringify({ customer_id: customerId, channel: "whatsapp" }),
+    }, session.accessToken);
+    await apiRequest(`/conversations/${conversation.id}/authorize-context`, {
+      method: "POST",
+    }, session.accessToken);
+    await apiRequest(`/conversations/${conversation.id}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ direction: "inbound", body: transcript }),
+    }, session.accessToken);
+    const result = await apiRequest(`/conversations/${conversation.id}/sales-assist`, {
+      method: "POST",
+      body: JSON.stringify({
+        response_locale: document.querySelector("#response-locale").value,
+        sales_goal: document.querySelector("#sales-goal").value.trim() || null,
+      }),
+    }, session.accessToken);
+    renderDecision(result.decision);
+    analysisStatus.textContent = "Analysis complete. Review the draft before sending it yourself.";
+  } catch (error) {
+    analysisStatus.textContent = error.message;
+  } finally {
+    analyzeButton.disabled = false;
+  }
+});
+
+function renderDecision(decision) {
+  decisionResult.replaceChildren();
+  const addSection = (heading, content) => {
+    const section = document.createElement("section");
+    const title = document.createElement("h3");
+    title.textContent = heading;
+    const body = document.createElement("p");
+    body.textContent = content;
+    section.append(title, body);
+    decisionResult.append(section);
+  };
+  const addList = (heading, values) => {
+    const section = document.createElement("section");
+    const title = document.createElement("h3");
+    title.textContent = heading;
+    const list = document.createElement("ul");
+    for (const value of values || []) {
+      const item = document.createElement("li");
+      item.textContent = value;
+      list.append(item);
+    }
+    section.append(title, list);
+    decisionResult.append(section);
+  };
+  const addStrategy = (heading, strategy) => {
+    const section = document.createElement("section");
+    const title = document.createElement("h3");
+    title.textContent = heading + (strategy.name ? ` · ${strategy.name}` : "");
+    section.append(title);
+    for (const [label, value] of [
+      ["Objective", strategy.objective], ["Rationale", strategy.rationale],
+      ["Next move", strategy.next_move], ["Risk", strategy.risk],
+    ]) {
+      const p = document.createElement("p");
+      p.textContent = `${label}: ${value}`;
+      section.append(p);
+    }
+    decisionResult.append(section);
+  };
+  addSection("Customer situation", decision.customer_situation);
+  addSection("Buying stage", decision.buying_stage);
+  addList("Buying signals", decision.buying_signals);
+  addList("Objections", decision.objections);
+  addStrategy("Strategy 1", decision.strategy_1);
+  addStrategy("Strategy 2", decision.strategy_2);
+  addSection("Strategy comparison", decision.comparison);
+  const selected = decision.selected_strategy === "strategy_1" ? decision.strategy_1 : decision.strategy_2;
+  addSection("VANTIQ selected", `${selected.name}: ${decision.selection_reason}`);
+  addSection("Suggested reply — review before sending", decision.suggested_reply);
+  addList("Before sending", decision.before_sending);
+  decisionResult.hidden = false;
+}
