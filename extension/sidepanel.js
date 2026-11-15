@@ -1,19 +1,130 @@
-const button = document.querySelector("#health-check");
+const DEFAULT_API_URL = "https://vantiq-mvp-production.up.railway.app";
+const apiInput = document.querySelector("#api-url");
+const healthButton = document.querySelector("#health-check");
 const status = document.querySelector("#status");
+const loginSection = document.querySelector("#login-section");
+const accountSection = document.querySelector("#account-section");
+const loginForm = document.querySelector("#login-form");
+const loginButton = document.querySelector("#login-button");
+const authStatus = document.querySelector("#auth-status");
+const accountName = document.querySelector("#account-name");
+const customerList = document.querySelector("#customer-list");
 
-button.addEventListener("click", async () => {
-  status.textContent = "Checking…";
-  button.disabled = true;
+function apiBase() {
+  return apiInput.value.trim().replace(/\/+$/, "") || DEFAULT_API_URL;
+}
+
+async function apiRequest(path, options = {}, token = null) {
+  const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const response = await fetch(`${apiBase()}${path}`, { ...options, headers });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = typeof body.detail === "string" ? body.detail : body.detail?.message;
+    throw new Error(detail || `Request failed (HTTP ${response.status})`);
+  }
+  return body;
+}
+
+async function readSession() {
+  const stored = await chrome.storage.session.get(["accessToken", "user"]);
+  return stored.accessToken ? stored : null;
+}
+
+async function showSignedOut(message = "") {
+  loginSection.hidden = false;
+  accountSection.hidden = true;
+  authStatus.textContent = message;
+}
+
+async function loadCustomers(token) {
+  customerList.replaceChildren();
+  const customers = await apiRequest("/customers?limit=50", {}, token);
+  if (!customers.length) {
+    const item = document.createElement("li");
+    item.textContent = "No customers in this workspace yet.";
+    customerList.append(item);
+    return;
+  }
+  for (const customer of customers) {
+    const item = document.createElement("li");
+    const name = document.createElement("strong");
+    name.textContent = customer.display_name;
+    item.append(name);
+    if (customer.company) {
+      const company = document.createElement("span");
+      company.textContent = ` — ${customer.company}`;
+      item.append(company);
+    }
+    customerList.append(item);
+  }
+}
+
+async function restoreSession() {
+  const session = await readSession();
+  if (!session) return showSignedOut();
   try {
-    const response = await fetch("http://localhost:8000/health");
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json();
-    status.textContent = data.status === "ok"
-      ? "Connected to VANTIQ API."
-      : "API responded, but health status is not OK.";
+    const user = await apiRequest("/auth/me", {}, session.accessToken);
+    accountName.textContent = `${user.display_name} · ${user.email} · ${user.role}`;
+    loginSection.hidden = true;
+    accountSection.hidden = false;
+    await loadCustomers(session.accessToken);
+  } catch {
+    await chrome.storage.session.remove(["accessToken", "user"]);
+    await showSignedOut("Your session expired. Please sign in again.");
+  }
+}
+
+healthButton.addEventListener("click", async () => {
+  status.textContent = "Checking…";
+  healthButton.disabled = true;
+  try {
+    const data = await apiRequest("/health");
+    status.textContent = data.status === "ok" ? "Connected to VANTIQ API." : "API responded with an unexpected status.";
   } catch (error) {
-    status.textContent = "Backend unavailable. Start the Docker Compose services.";
+    status.textContent = `Backend unavailable: ${error.message}`;
   } finally {
-    button.disabled = false;
+    healthButton.disabled = false;
   }
 });
+
+loginForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  loginButton.disabled = true;
+  authStatus.textContent = "Signing in…";
+  try {
+    const credentials = {
+      email: document.querySelector("#email").value.trim(),
+      password: document.querySelector("#password").value,
+    };
+    const result = await apiRequest("/auth/login", {
+      method: "POST",
+      body: JSON.stringify(credentials),
+    });
+    await chrome.storage.session.set({ accessToken: result.access_token, user: result.user });
+    document.querySelector("#password").value = "";
+    await restoreSession();
+  } catch (error) {
+    authStatus.textContent = error.message;
+  } finally {
+    loginButton.disabled = false;
+  }
+});
+
+document.querySelector("#refresh-customers").addEventListener("click", async () => {
+  const session = await readSession();
+  if (!session) return restoreSession();
+  try {
+    await loadCustomers(session.accessToken);
+  } catch (error) {
+    authStatus.textContent = error.message;
+  }
+});
+
+document.querySelector("#logout").addEventListener("click", async () => {
+  await chrome.storage.session.remove(["accessToken", "user"]);
+  await showSignedOut("Signed out.");
+});
+
+apiInput.value = DEFAULT_API_URL;
+restoreSession();
