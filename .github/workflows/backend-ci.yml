@@ -36,8 +36,23 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Run Chrome extension transcript tests
+      - name: Validate extension JavaScript syntax
+        run: |
+          node --check extension/content.js
+          node --check extension/service-worker.js
+          node --check extension/sidepanel.js
+          node --check extension/transcript.mjs
+      - name: Run Chrome extension tests
         run: node --test extension/tests/*.test.mjs
+      - name: Package Chrome extension
+        run: python extension/package.py
+      - name: Upload installable Chrome extension
+        uses: actions/upload-artifact@v4
+        with:
+          name: vantiq-chrome-extension
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 14
       - name: Install backend dependencies
         run: python -m pip install -r backend/requirements.txt
       - name: Validate Python syntax
