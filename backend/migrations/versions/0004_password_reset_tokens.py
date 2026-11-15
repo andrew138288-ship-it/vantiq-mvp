@@ -8,7 +8,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 revision = "0004_password_reset_tokens"
-down_revision = "0003_conversation_context_authorization"
+down_revision = "0003_context_authorization"
 branch_labels = None
 depends_on = None
 
