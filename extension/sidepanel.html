@@ -43,13 +43,16 @@
         <h2>Workspace</h2>
         <p id="account-name"></p>
         <button id="refresh-customers" type="button" class="secondary">Refresh customers</button>
+        <label for="new-customer-name">Add customer</label>
+        <input id="new-customer-name" type="text" maxlength="200" placeholder="Customer name">
+        <button id="add-customer" type="button" class="secondary">Add customer</button>
         <button id="logout" type="button" class="secondary">Sign out</button>
         <ul id="customer-list" aria-live="polite"></ul>
         <h2>Sales intelligence</h2>
         <label for="customer-select">Customer</label>
         <select id="customer-select"><option value="">Select a customer</option></select>
         <label for="transcript">Paste conversation context</label>
-        <textarea id="transcript" rows="7" placeholder="Paste only the customer conversation you are authorized to share. Include speaker labels where possible."></textarea>
+        <textarea id="transcript" rows="7" maxlength="12000" placeholder="Paste only the customer conversation you are authorized to share. Include speaker labels where possible."></textarea>
         <label for="response-locale">Reply language</label>
         <select id="response-locale">
           <option value="zh-CN">简体中文</option>
@@ -65,6 +68,7 @@
         <button id="analyze" type="button">Analyze conversation</button>
         <p id="analysis-status" role="status"></p>
         <article id="decision-result" hidden aria-live="polite"></article>
+        <button id="copy-reply" type="button" class="secondary" hidden>Copy suggested reply</button>
       </section>
       <footer>Locale support includes separate pt-BR and pt-PT variants.</footer>
     </main>
