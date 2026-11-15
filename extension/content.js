@@ -19,16 +19,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .join(" ");
     if (!text) continue;
     const direction = node.closest(".message-out") ? "Salesperson" : "Customer";
-    const metadata = node.getAttribute("data-pre-plain-text") || "";
-    const senderMatch = metadata.match(/\\]\\s*([^:]+):/);
-    const sender = senderMatch?.[1]?.trim();
-    lines.push(`${direction}${sender ? ` (${sender})` : ""}: ${text}`);
+    lines.push(direction + ": " + text);
   }
 
   if (!lines.length) {
     sendResponse({ ok: false, error: "No readable text messages found in the currently loaded conversation." });
     return false;
   }
-  sendResponse({ ok: true, transcript: lines.join("\\n"), count: lines.length });
+  sendResponse({ ok: true, transcript: lines.join("\n"), count: lines.length });
   return false;
 });
