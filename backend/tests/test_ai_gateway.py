@@ -23,6 +23,30 @@ def test_portuguese_variants_remain_distinct():
     assert brazil != portugal
 
 
+def test_ai_compares_two_distinct_strategies_and_selects_one():
+    instructions = build_sales_instructions("zh-CN", "move the deal forward")
+    assert "exactly TWO materially different" in instructions
+    assert "materially different" in instructions
+    assert "Select ONE best strategy" in instructions
+    assert "Do not average the strategies" in instructions
+    assert "Selected strategy and reason" in instructions
+    assert "suggested_reply" in instructions
+    assert "Output ONLY valid JSON" in instructions
+
+
+def test_ai_must_separate_facts_from_hypotheses_and_avoid_invention():
+    instructions = build_sales_instructions("en-US", None)
+    assert "Separate observed facts from hypotheses" in instructions
+    assert "Do not invent product facts, prices, stock" in instructions
+    assert "facts or terms the salesperson should verify" in instructions
+
+
+def test_universal_sales_scope_and_b2b_b2c():
+    instructions = build_sales_instructions("en-US", None)
+    assert "any legal product or service" in instructions
+    assert "B2B or B2C" in instructions
+
+
 def test_missing_api_key_fails_closed(monkeypatch):
     import asyncio
     import pytest
@@ -37,3 +61,37 @@ def test_missing_api_key_fails_closed(monkeypatch):
                 response_locale="en-US",
             )
         )
+
+
+def test_structured_sales_decision_requires_two_strategies_and_valid_selection():
+    import pytest
+    from pydantic import ValidationError
+    from app.schemas import SalesDecision
+
+    strategy = {
+        "name": "Clarify value",
+        "objective": "Understand the buyer's priority",
+        "rationale": "The buyer has not shared decision criteria",
+        "next_move": "Ask one focused question",
+        "risk": "May delay an immediate quote",
+    }
+    payload = {
+        "customer_situation": "The buyer is comparing suppliers",
+        "buying_stage": "consideration",
+        "buying_signals": ["Asked about warranty"],
+        "objections": ["Price uncertainty"],
+        "strategy_1": strategy,
+        "strategy_2": {**strategy, "name": "Offer a scoped quote"},
+        "comparison": "Strategy 1 reduces uncertainty; strategy 2 advances pricing",
+        "selected_strategy": "strategy_1",
+        "selection_reason": "Decision criteria are still unclear",
+        "suggested_reply": "May I ask what matters most in your comparison?",
+        "before_sending": ["Confirm warranty terms"],
+    }
+    decision = SalesDecision.model_validate(payload)
+    assert decision.selected_strategy == "strategy_1"
+    assert decision.strategy_2.name == "Offer a scoped quote"
+
+    payload["selected_strategy"] = "strategy_3"
+    with pytest.raises(ValidationError):
+        SalesDecision.model_validate(payload)

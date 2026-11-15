@@ -18,9 +18,58 @@
         <p>VANTIQ drafts and advises. You decide what to send. No message is sent automatically.</p>
       </section>
       <section>
-        <h2>Backend connection</h2>
-        <button id="health-check" type="button">Check backend</button>
+        <h2>API connection</h2>
+        <label for="api-url">VANTIQ API URL</label>
+        <input id="api-url" type="url" value="https://vantiq-mvp-production.up.railway.app" autocomplete="url">
+        <button id="health-check" type="button" class="secondary">Check backend</button>
         <p id="status" role="status">Not checked yet</p>
+      </section>
+      <section id="login-section">
+        <h2>Sign in</h2>
+        <form id="login-form">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="username" required>
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required>
+          <div id="workspace-picker" hidden>
+            <label for="workspace-id">Choose workspace</label>
+            <select id="workspace-id"></select>
+          </div>
+          <button id="login-button" type="submit">Sign in</button>
+        </form>
+        <p id="auth-status" role="status"></p>
+      </section>
+      <section id="account-section" hidden>
+        <h2>Workspace</h2>
+        <p id="account-name"></p>
+        <button id="refresh-customers" type="button" class="secondary">Refresh customers</button>
+        <label for="new-customer-name">Add customer</label>
+        <input id="new-customer-name" type="text" maxlength="200" placeholder="Customer name">
+        <button id="add-customer" type="button" class="secondary">Add customer</button>
+        <button id="logout" type="button" class="secondary">Sign out</button>
+        <ul id="customer-list" aria-live="polite"></ul>
+        <h2>Sales intelligence</h2>
+        <label for="customer-select">Customer</label>
+        <select id="customer-select"><option value="">Select a customer</option></select>
+        <button id="import-visible-chat" type="button" class="secondary">Import currently open WhatsApp chat</button>
+        <label for="transcript">Conversation context (review before analysis)</label>
+        <textarea id="transcript" rows="7" maxlength="12000" placeholder="Paste only the customer conversation you are authorized to share. Include speaker labels where possible."></textarea>
+        <label for="response-locale">Reply language</label>
+        <select id="response-locale">
+          <option value="zh-CN">简体中文</option>
+          <option value="zh-TW">繁體中文</option>
+          <option value="en-US">English (US)</option>
+          <option value="pt-BR">Português (Brasil)</option>
+          <option value="pt-PT">Português (Portugal)</option>
+          <option value="es-ES">Español</option>
+        </select>
+        <label for="sales-goal">Sales goal (optional)</label>
+        <input id="sales-goal" type="text" maxlength="500" placeholder="e.g. clarify requirements, negotiate price">
+        <label class="consent"><input id="context-consent" type="checkbox"> I confirm I am authorized to share this conversation with VANTIQ for analysis.</label>
+        <button id="analyze" type="button">Analyze conversation</button>
+        <p id="analysis-status" role="status"></p>
+        <article id="decision-result" hidden aria-live="polite"></article>
+        <button id="copy-reply" type="button" class="secondary" hidden>Copy suggested reply</button>
       </section>
       <footer>Locale support includes separate pt-BR and pt-PT variants.</footer>
     </main>

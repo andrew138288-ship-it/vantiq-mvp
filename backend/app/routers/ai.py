@@ -71,7 +71,7 @@ async def sales_assist(
     )
     bounded_context = (customer_context + "\n" + transcript)[-24000:]
     try:
-        suggestion, model = await generate_sales_assist(
+        decision, model = await generate_sales_assist(
             conversation_text=bounded_context,
             response_locale=payload.response_locale,
             sales_goal=payload.sales_goal,
@@ -83,7 +83,8 @@ async def sales_assist(
 
     return SalesAssistResponse(
         conversation_id=conversation.id,
-        suggestion=suggestion,
+        suggestion=decision.suggested_reply,
+        decision=decision,
         model=model,
         generated_at=datetime.now(timezone.utc),
         requires_human_review=True,

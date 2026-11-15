@@ -113,9 +113,32 @@ class SalesAssistRequest(BaseModel):
     sales_goal: str | None = Field(default=None, max_length=500)
 
 
+class SalesStrategy(BaseModel):
+    name: str
+    objective: str
+    rationale: str
+    next_move: str
+    risk: str
+
+
+class SalesDecision(BaseModel):
+    customer_situation: str
+    buying_stage: str
+    buying_signals: list[str]
+    objections: list[str]
+    strategy_1: SalesStrategy
+    strategy_2: SalesStrategy
+    comparison: str
+    selected_strategy: str = Field(pattern="^(strategy_1|strategy_2)$")
+    selection_reason: str
+    suggested_reply: str
+    before_sending: list[str]
+
+
 class SalesAssistResponse(BaseModel):
     conversation_id: uuid.UUID
     suggestion: str
+    decision: SalesDecision
     model: str
     generated_at: datetime
     requires_human_review: bool = True

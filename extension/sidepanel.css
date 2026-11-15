@@ -29,3 +29,30 @@ button {
 }
 #status { min-height: 24px; color: #c5cce0; }
 footer { margin-top: 32px; font-size: 12px; }
+
+label { display: block; margin: 12px 0 6px; color: #c5cce0; font-size: 13px; }
+input {
+  width: 100%; margin-bottom: 8px; padding: 10px 11px; border: 1px solid #424b64;
+  border-radius: 8px; background: #171c29; color: #f4f6fb; font: inherit;
+}
+button { margin: 8px 6px 8px 0; }
+button:disabled { opacity: .55; cursor: wait; }
+button.secondary { background: #303a52; color: #f4f6fb; }
+section { margin: 22px 0; }
+[hidden] { display: none !important; }
+#customer-list { padding-left: 18px; color: #d9dfed; }
+#customer-list li { margin: 9px 0; overflow-wrap: anywhere; }
+
+textarea, select {
+  width: 100%; margin-bottom: 8px; padding: 10px 11px; border: 1px solid #424b64;
+  border-radius: 8px; background: #171c29; color: #f4f6fb; font: inherit;
+}
+textarea { resize: vertical; line-height: 1.45; }
+.consent { display: flex; align-items: flex-start; gap: 8px; line-height: 1.45; }
+.consent input { width: auto; margin-top: 3px; }
+#decision-result { margin-top: 18px; padding: 14px; border: 1px solid #424b64; border-radius: 12px; background: #171c29; }
+#decision-result section { margin: 16px 0; }
+#decision-result h3 { font-size: 14px; color: #a9b9ff; }
+#decision-result p, #decision-result li { line-height: 1.5; overflow-wrap: anywhere; }
+
+#copy-reply { margin-top: 10px; }
