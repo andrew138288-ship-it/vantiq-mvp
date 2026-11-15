@@ -1,11 +1,12 @@
 import re
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from ..dependencies import get_db, get_current_principal
 from ..models import Tenant, User, TenantMembership
+from ..rate_limit import limiter
 from ..schemas import RegisterRequest, LoginRequest, TokenResponse, UserPublic
 from ..security import hash_password, verify_password, create_access_token
 
@@ -18,7 +19,8 @@ def _slugify(value: str) -> str:
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-def register(payload: RegisterRequest, db: Session = Depends(get_db)):
+@limiter.limit("3/hour")
+def register(request: Request, payload: RegisterRequest, db: Session = Depends(get_db)):
     if db.scalar(select(User).where(User.email == payload.email)):
         raise HTTPException(status_code=409, detail="Email is already registered")
     tenant = Tenant(name=payload.tenant_name.strip(), slug=_slugify(payload.tenant_name))
@@ -46,7 +48,8 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.email == payload.email))
     if user is None or not user.is_active or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Email or password is incorrect")
