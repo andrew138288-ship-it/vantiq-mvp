@@ -32,6 +32,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Set up Node.js for extension tests
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run Chrome extension transcript tests
+        run: node --test extension/tests/*.test.mjs
       - name: Install backend dependencies
         run: python -m pip install -r backend/requirements.txt
       - name: Validate Python syntax
