@@ -23,6 +23,29 @@ def test_portuguese_variants_remain_distinct():
     assert brazil != portugal
 
 
+def test_ai_compares_two_distinct_strategies_and_selects_one():
+    instructions = build_sales_instructions("zh-CN", "move the deal forward")
+    assert "exactly TWO materially different" in instructions
+    assert "Avoid presenting two superficial wording variants" in instructions
+    assert "Select ONE best strategy" in instructions
+    assert "Do not average the strategies" in instructions
+    assert "Selected strategy and reason" in instructions
+    assert "Suggested reply" in instructions
+
+
+def test_ai_must_separate_facts_from_hypotheses_and_avoid_invention():
+    instructions = build_sales_instructions("en-US", None)
+    assert "Separate observed facts from hypotheses" in instructions
+    assert "Do not invent product facts, prices, stock" in instructions
+    assert "facts or terms the salesperson should verify" in instructions
+
+
+def test_universal_sales_scope_and_b2b_b2c():
+    instructions = build_sales_instructions("en-US", None)
+    assert "any legal product or service" in instructions
+    assert "B2B or B2C" in instructions
+
+
 def test_missing_api_key_fails_closed(monkeypatch):
     import asyncio
     import pytest
