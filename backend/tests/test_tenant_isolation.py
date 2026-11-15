@@ -233,3 +233,24 @@ def test_deactivated_user_cannot_reuse_existing_token(isolated_client):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 401
+
+
+def test_login_endpoint_enforces_ip_rate_limit(isolated_client):
+    from app.rate_limit import limiter
+
+    client, _, _, _ = isolated_client
+    limiter.reset()
+    try:
+        for _ in range(5):
+            response = client.post(
+                "/api/v1/auth/login",
+                json={"email": "missing@example.com", "password": "incorrect-password"},
+            )
+            assert response.status_code == 401
+        limited = client.post(
+            "/api/v1/auth/login",
+            json={"email": "missing@example.com", "password": "incorrect-password"},
+        )
+        assert limited.status_code == 429
+    finally:
+        limiter.reset()
