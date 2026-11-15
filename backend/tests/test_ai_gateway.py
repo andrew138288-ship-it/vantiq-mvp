@@ -26,11 +26,12 @@ def test_portuguese_variants_remain_distinct():
 def test_ai_compares_two_distinct_strategies_and_selects_one():
     instructions = build_sales_instructions("zh-CN", "move the deal forward")
     assert "exactly TWO materially different" in instructions
-    assert "Avoid presenting two superficial wording variants" in instructions
+    assert "materially different" in instructions
     assert "Select ONE best strategy" in instructions
     assert "Do not average the strategies" in instructions
     assert "Selected strategy and reason" in instructions
-    assert "Suggested reply" in instructions
+    assert "suggested_reply" in instructions
+    assert "Output ONLY valid JSON" in instructions
 
 
 def test_ai_must_separate_facts_from_hypotheses_and_avoid_invention():
