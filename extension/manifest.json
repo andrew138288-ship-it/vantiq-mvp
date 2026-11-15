@@ -3,9 +3,14 @@
   "name": "VANTIQ — World-Class Sales AI",
   "version": "0.1.0",
   "description": "A human-reviewed sales intelligence side panel.",
-  "permissions": ["sidePanel", "activeTab"],
+  "permissions": [
+    "sidePanel",
+    "activeTab",
+    "storage"
+  ],
   "host_permissions": [
     "https://web.whatsapp.com/*",
+    "https://vantiq-mvp-production.up.railway.app/*",
     "http://localhost:8000/*"
   ],
   "background": {
@@ -20,8 +25,12 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://web.whatsapp.com/*"],
-      "js": ["content.js"],
+      "matches": [
+        "https://web.whatsapp.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ]
