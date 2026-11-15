@@ -54,3 +54,5 @@ textarea { resize: vertical; line-height: 1.45; }
 #decision-result section { margin: 16px 0; }
 #decision-result h3 { font-size: 14px; color: #a9b9ff; }
 #decision-result p, #decision-result li { line-height: 1.5; overflow-wrap: anywhere; }
+
+#copy-reply { margin-top: 10px; }
