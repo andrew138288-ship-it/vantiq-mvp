@@ -61,3 +61,37 @@ def test_missing_api_key_fails_closed(monkeypatch):
                 response_locale="en-US",
             )
         )
+
+
+def test_structured_sales_decision_requires_two_strategies_and_valid_selection():
+    import pytest
+    from pydantic import ValidationError
+    from app.schemas import SalesDecision
+
+    strategy = {
+        "name": "Clarify value",
+        "objective": "Understand the buyer's priority",
+        "rationale": "The buyer has not shared decision criteria",
+        "next_move": "Ask one focused question",
+        "risk": "May delay an immediate quote",
+    }
+    payload = {
+        "customer_situation": "The buyer is comparing suppliers",
+        "buying_stage": "consideration",
+        "buying_signals": ["Asked about warranty"],
+        "objections": ["Price uncertainty"],
+        "strategy_1": strategy,
+        "strategy_2": {**strategy, "name": "Offer a scoped quote"},
+        "comparison": "Strategy 1 reduces uncertainty; strategy 2 advances pricing",
+        "selected_strategy": "strategy_1",
+        "selection_reason": "Decision criteria are still unclear",
+        "suggested_reply": "May I ask what matters most in your comparison?",
+        "before_sending": ["Confirm warranty terms"],
+    }
+    decision = SalesDecision.model_validate(payload)
+    assert decision.selected_strategy == "strategy_1"
+    assert decision.strategy_2.name == "Offer a scoped quote"
+
+    payload["selected_strategy"] = "strategy_3"
+    with pytest.raises(ValidationError):
+        SalesDecision.model_validate(payload)
