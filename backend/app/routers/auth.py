@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from ..db import settings
 from ..dependencies import get_db, get_current_principal
 from ..models import Tenant, User, TenantMembership
 from ..schemas import RegisterRequest, LoginRequest, TokenResponse, UserPublic
@@ -48,19 +47,50 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
-    email = payload.email.strip().lower()
-    user = db.scalar(select(User).where(User.email == email))
+    user = db.scalar(select(User).where(User.email == payload.email))
     if user is None or not user.is_active or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Email or password is incorrect")
-    membership = db.scalar(
-        select(TenantMembership).where(TenantMembership.user_id == user.id).order_by(TenantMembership.created_at)
+
+    memberships = list(
+        db.scalars(
+            select(TenantMembership)
+            .where(TenantMembership.user_id == user.id)
+            .order_by(TenantMembership.created_at)
+        ).all()
     )
-    if membership is None:
+    if not memberships:
         raise HTTPException(status_code=403, detail="No workspace membership is available")
-    token = create_access_token(user_id=str(user.id), tenant_id=str(membership.tenant_id), role=membership.role)
+
+    if payload.tenant_id is not None:
+        membership = next((m for m in memberships if m.tenant_id == payload.tenant_id), None)
+        if membership is None:
+            raise HTTPException(status_code=403, detail="You are not a member of the selected workspace")
+    elif len(memberships) > 1:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "workspace_selection_required",
+                "message": "This account belongs to multiple workspaces. Submit tenant_id to select one.",
+                "workspaces": [{"tenant_id": str(m.tenant_id), "role": m.role} for m in memberships],
+            },
+        )
+    else:
+        membership = memberships[0]
+
+    token = create_access_token(
+        user_id=str(user.id),
+        tenant_id=str(membership.tenant_id),
+        role=membership.role,
+    )
     return TokenResponse(
         access_token=token,
-        user=UserPublic(id=user.id, email=user.email, display_name=user.display_name, tenant_id=membership.tenant_id, role=membership.role),
+        user=UserPublic(
+            id=user.id,
+            email=user.email,
+            display_name=user.display_name,
+            tenant_id=membership.tenant_id,
+            role=membership.role,
+        ),
     )
 
 
