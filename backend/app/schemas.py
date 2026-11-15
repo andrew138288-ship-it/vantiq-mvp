@@ -1,7 +1,7 @@
 import re
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class RegisterRequest(BaseModel):
@@ -59,6 +59,12 @@ class CustomerUpdate(BaseModel):
     external_ref: str | None = Field(default=None, max_length=160)
     preferred_locale: str | None = Field(default=None, max_length=16)
     notes: str | None = None
+
+    @model_validator(mode="after")
+    def reject_null_display_name(self):
+        if "display_name" in self.model_fields_set and self.display_name is None:
+            raise ValueError("display_name cannot be null")
+        return self
 
 
 class CustomerPublic(BaseModel):
