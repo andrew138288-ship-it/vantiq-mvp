@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     access_token_minutes: int = 60
     openai_api_key: str | None = None
     openai_model: str = "gpt-6-astra"
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    email_from: str | None = None
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @model_validator(mode="after")
