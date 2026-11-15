@@ -1,7 +1,7 @@
 from pydantic import ValidationError
 import pytest
 
-from app.schemas import MessageCreate, RegisterRequest
+from app.schemas import MessageCreate, RegisterRequest, LoginRequest
 from app.security import create_access_token, decode_access_token, hash_password, verify_password
 
 
@@ -46,9 +46,26 @@ def test_registration_rejects_short_password():
         )
 
 
+def test_login_normalizes_email_and_accepts_optional_workspace():
+    tenant_id = "3c2c45a4-9b45-4e1b-b30c-13eaa36d3c1a"
+    payload = LoginRequest(
+        email=" SALES@EXAMPLE.COM ",
+        password="example-password",
+        tenant_id=tenant_id,
+    )
+    assert payload.email == "sales@example.com"
+    assert str(payload.tenant_id) == tenant_id
+
+
+def test_login_workspace_is_optional_for_single_workspace_compatibility():
+    payload = LoginRequest(email="sales@example.com", password="example-password")
+    assert payload.tenant_id is None
+
+
 def test_message_direction_is_restricted():
     with pytest.raises(ValidationError):
         MessageCreate(direction="system", body="This direction is not allowed")
+
 
 def test_alembic_revision_ids_fit_version_column_and_form_single_chain():
     from pathlib import Path
