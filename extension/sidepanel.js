@@ -11,6 +11,7 @@ const accountName = document.querySelector("#account-name");
 const customerList = document.querySelector("#customer-list");
 const customerSelect = document.querySelector("#customer-select");
 const analyzeButton = document.querySelector("#analyze");
+const importChatButton = document.querySelector("#import-visible-chat");
 const analysisStatus = document.querySelector("#analysis-status");
 const decisionResult = document.querySelector("#decision-result");
 const copyReplyButton = document.querySelector("#copy-reply");
@@ -172,6 +173,25 @@ document.querySelector("#logout").addEventListener("click", async () => {
 
 apiInput.value = DEFAULT_API_URL;
 restoreSession();
+
+importChatButton.addEventListener("click", async () => {
+  importChatButton.disabled = true;
+  analysisStatus.textContent = "Requesting the currently open WhatsApp conversation…";
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    if (!tab?.id) throw new Error("No active browser tab found.");
+    const result = await chrome.tabs.sendMessage(tab.id, { type: "VANTIQ_READ_VISIBLE_CHAT" });
+    if (!result?.ok) throw new Error(result?.error || "Could not read the visible conversation.");
+    document.querySelector("#transcript").value = result.transcript;
+    analysisStatus.textContent = `Imported ${result.count} visible messages. Review the text and confirm authorization before analysis.`;
+  } catch (error) {
+    analysisStatus.textContent = error.message.includes("Receiving end does not exist")
+      ? "Open WhatsApp Web and reload the tab, then try again."
+      : error.message;
+  } finally {
+    importChatButton.disabled = false;
+  }
+});
 
 analyzeButton.addEventListener("click", async () => {
   const session = await readSession();
