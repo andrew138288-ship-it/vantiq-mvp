@@ -18,9 +18,29 @@
         <p>VANTIQ drafts and advises. You decide what to send. No message is sent automatically.</p>
       </section>
       <section>
-        <h2>Backend connection</h2>
-        <button id="health-check" type="button">Check backend</button>
+        <h2>API connection</h2>
+        <label for="api-url">VANTIQ API URL</label>
+        <input id="api-url" type="url" value="https://vantiq-mvp-production.up.railway.app" autocomplete="url">
+        <button id="health-check" type="button" class="secondary">Check backend</button>
         <p id="status" role="status">Not checked yet</p>
+      </section>
+      <section id="login-section">
+        <h2>Sign in</h2>
+        <form id="login-form">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="username" required>
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required>
+          <button id="login-button" type="submit">Sign in</button>
+        </form>
+        <p id="auth-status" role="status"></p>
+      </section>
+      <section id="account-section" hidden>
+        <h2>Workspace</h2>
+        <p id="account-name"></p>
+        <button id="refresh-customers" type="button" class="secondary">Refresh customers</button>
+        <button id="logout" type="button" class="secondary">Sign out</button>
+        <ul id="customer-list" aria-live="polite"></ul>
       </section>
       <footer>Locale support includes separate pt-BR and pt-PT variants.</footer>
     </main>
