@@ -13,6 +13,8 @@ const customerSelect = document.querySelector("#customer-select");
 const analyzeButton = document.querySelector("#analyze");
 const analysisStatus = document.querySelector("#analysis-status");
 const decisionResult = document.querySelector("#decision-result");
+const copyReplyButton = document.querySelector("#copy-reply");
+let latestSuggestedReply = "";
 const workspacePicker = document.querySelector("#workspace-picker");
 const workspaceSelect = document.querySelector("#workspace-id");
 
@@ -141,6 +143,28 @@ document.querySelector("#refresh-customers").addEventListener("click", async () 
   }
 });
 
+document.querySelector("#add-customer").addEventListener("click", async () => {
+  const session = await readSession();
+  const nameInput = document.querySelector("#new-customer-name");
+  const displayName = nameInput.value.trim();
+  if (!session) return showSignedOut("Please sign in again.");
+  if (!displayName) {
+    authStatus.textContent = "Enter a customer name.";
+    return;
+  }
+  try {
+    await apiRequest("/customers", {
+      method: "POST",
+      body: JSON.stringify({ display_name: displayName }),
+    }, session.accessToken);
+    nameInput.value = "";
+    await loadCustomers(session.accessToken);
+    authStatus.textContent = "Customer added.";
+  } catch (error) {
+    authStatus.textContent = error.message;
+  }
+});
+
 document.querySelector("#logout").addEventListener("click", async () => {
   await chrome.storage.session.remove(["accessToken", "user"]);
   await showSignedOut("Signed out.");
@@ -190,7 +214,9 @@ analyzeButton.addEventListener("click", async () => {
         sales_goal: document.querySelector("#sales-goal").value.trim() || null,
       }),
     }, session.accessToken);
+    latestSuggestedReply = result.decision.suggested_reply;
     renderDecision(result.decision);
+    copyReplyButton.hidden = false;
     analysisStatus.textContent = "Analysis complete. Review the draft before sending it yourself.";
   } catch (error) {
     analysisStatus.textContent = error.message;
@@ -251,3 +277,13 @@ function renderDecision(decision) {
   addList("Before sending", decision.before_sending);
   decisionResult.hidden = false;
 }
+
+copyReplyButton.addEventListener("click", async () => {
+  if (!latestSuggestedReply) return;
+  try {
+    await navigator.clipboard.writeText(latestSuggestedReply);
+    analysisStatus.textContent = "Suggested reply copied. Review it before manually sending.";
+  } catch {
+    analysisStatus.textContent = "Copy failed. Select and copy the reply text manually.";
+  }
+});
