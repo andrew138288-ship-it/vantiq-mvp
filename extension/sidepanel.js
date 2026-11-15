@@ -9,6 +9,8 @@ const loginButton = document.querySelector("#login-button");
 const authStatus = document.querySelector("#auth-status");
 const accountName = document.querySelector("#account-name");
 const customerList = document.querySelector("#customer-list");
+const workspacePicker = document.querySelector("#workspace-picker");
+const workspaceSelect = document.querySelector("#workspace-id");
 
 function apiBase() {
   return apiInput.value.trim().replace(/\/+$/, "") || DEFAULT_API_URL;
@@ -21,7 +23,10 @@ async function apiRequest(path, options = {}, token = null) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     const detail = typeof body.detail === "string" ? body.detail : body.detail?.message;
-    throw new Error(detail || `Request failed (HTTP ${response.status})`);
+    const error = new Error(detail || `Request failed (HTTP ${response.status})`);
+    error.status = response.status;
+    error.detail = body.detail;
+    throw error;
   }
   return body;
 }
@@ -96,6 +101,7 @@ loginForm.addEventListener("submit", async (event) => {
     const credentials = {
       email: document.querySelector("#email").value.trim(),
       password: document.querySelector("#password").value,
+      ...(workspaceSelect.value ? { tenant_id: workspaceSelect.value } : {}),
     };
     const result = await apiRequest("/auth/login", {
       method: "POST",
@@ -105,7 +111,19 @@ loginForm.addEventListener("submit", async (event) => {
     document.querySelector("#password").value = "";
     await restoreSession();
   } catch (error) {
-    authStatus.textContent = error.message;
+    if (error.status === 409 && error.detail?.code === "workspace_selection_required") {
+      workspaceSelect.replaceChildren();
+      for (const workspace of error.detail.workspaces || []) {
+        const option = document.createElement("option");
+        option.value = workspace.tenant_id;
+        option.textContent = `${workspace.role} · ${workspace.tenant_id.slice(0, 8)}`;
+        workspaceSelect.append(option);
+      }
+      workspacePicker.hidden = false;
+      authStatus.textContent = "This account has multiple workspaces. Choose one and sign in again.";
+    } else {
+      authStatus.textContent = error.message;
+    }
   } finally {
     loginButton.disabled = false;
   }
