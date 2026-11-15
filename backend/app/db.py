@@ -1,6 +1,10 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+_DEFAULT_JWT_SECRET = "CHANGE_THIS_LOCAL_DEVELOPMENT_SECRET_BEFORE_DEPLOYMENT"
 
 
 def normalize_database_url(url: str) -> str:
@@ -16,11 +20,21 @@ class Settings(BaseSettings):
     app_name: str = "VANTIQ API"
     app_env: str = "development"
     database_url: str = "postgresql+psycopg://vantiq:vantiq_local_only@localhost:5432/vantiq"
-    jwt_secret: str = "CHANGE_THIS_LOCAL_DEVELOPMENT_SECRET_BEFORE_DEPLOYMENT"
+    jwt_secret: str = _DEFAULT_JWT_SECRET
     access_token_minutes: int = 60
     openai_api_key: str | None = None
     openai_model: str = "gpt-6-astra"
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @model_validator(mode="after")
+    def require_production_jwt_secret(self):
+        if self.app_env.strip().lower() in {"production", "prod"}:
+            if self.jwt_secret == _DEFAULT_JWT_SECRET or len(self.jwt_secret) < 32:
+                raise ValueError(
+                    "Production requires JWT_SECRET to be explicitly configured "
+                    "with at least 32 characters"
+                )
+        return self
 
 
 settings = Settings()
