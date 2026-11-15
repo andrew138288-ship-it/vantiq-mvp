@@ -1,3 +1,4 @@
+import { parseTranscript } from "./transcript.mjs";
 const DEFAULT_API_URL = "https://vantiq-mvp-production.up.railway.app";
 const apiInput = document.querySelector("#api-url");
 const healthButton = document.querySelector("#health-check");
@@ -223,10 +224,13 @@ analyzeButton.addEventListener("click", async () => {
     await apiRequest(`/conversations/${conversation.id}/authorize-context`, {
       method: "POST",
     }, session.accessToken);
-    await apiRequest(`/conversations/${conversation.id}/messages`, {
-      method: "POST",
-      body: JSON.stringify({ direction: "inbound", body: transcript }),
-    }, session.accessToken);
+    const messages = parseTranscript(transcript);
+    for (const message of messages) {
+      await apiRequest(`/conversations/${conversation.id}/messages`, {
+        method: "POST",
+        body: JSON.stringify(message),
+      }, session.accessToken);
+    }
     const result = await apiRequest(`/conversations/${conversation.id}/sales-assist`, {
       method: "POST",
       body: JSON.stringify({
