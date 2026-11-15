@@ -1,9 +1,14 @@
 from fastapi import FastAPI
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 from .db import engine, settings
+from .rate_limit import limiter
 from .routers import auth, customers, conversations, ai
 
 app = FastAPI(title=settings.app_name, version="0.4.0")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(customers.router, prefix="/api/v1")
 app.include_router(conversations.router, prefix="/api/v1")
