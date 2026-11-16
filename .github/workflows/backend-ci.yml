@@ -36,6 +36,34 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Resolve and generate React extension dependency lockfile
+        working-directory: extension-react
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Install locked React extension dependencies
+        working-directory: extension-react
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Test and typecheck React extension
+        working-directory: extension-react
+        run: npm test
+      - name: Build React WhatsApp dock
+        working-directory: extension-react
+        run: npm run build
+      - name: Package React WhatsApp dock
+        run: python extension-react/package.py
+      - name: Upload generated npm lockfile for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: vantiq-react-extension-lockfile
+          path: extension-react/package-lock.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload installable React Chrome extension
+        uses: actions/upload-artifact@v4
+        with:
+          name: vantiq-react-whatsapp-dock
+          path: dist/VANTIQ-WhatsApp-Dock-0.2.0.zip
+          if-no-files-found: error
+          retention-days: 14
       - name: Validate extension JavaScript syntax
         run: |
           node --check extension/content.js
