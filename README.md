@@ -33,7 +33,7 @@ Initial workflow:
 - SQLAlchemy 2.x models and Alembic migrations
 - Free account registration with Argon2 password hashing and required email verification before login
 - Single-use, hashed email-verification and password-reset tokens with expiry and resend flows
-- JWT bearer authentication, active tenant-membership verification, and token-version revocation after password reset
+- JWT bearer authentication with 15-minute access tokens, rotating 30-day refresh sessions, hashed refresh-token storage, device session listing/revocation, and token-version invalidation
 - Tenant-scoped customer create/list/read/update APIs
 - Conversation creation tied to a customer in the authenticated tenant
 - Separate explicit context-authorization endpoint before message ingestion
@@ -70,7 +70,10 @@ Load in desktop Chrome:
 - `POST /api/v1/auth/register` — create a pending free account; sends a verification email and returns no access token
 - `POST /api/v1/auth/verify-email` — consume a one-time verification token and activate the free account
 - `POST /api/v1/auth/resend-verification` — resend a verification token, with a generic anti-enumeration response
-- `POST /api/v1/auth/login` — authenticate verified users and receive a bearer token
+- `POST /api/v1/auth/login` — authenticate verified users and receive an access token plus refresh token
+- `POST /api/v1/auth/refresh` — rotate a refresh token and issue a new access token
+- `POST /api/v1/auth/logout` and `/logout-all` — revoke one or all account sessions
+- `GET /api/v1/auth/sessions` and `DELETE /api/v1/auth/sessions/{session_id}` — inspect and revoke active sessions
 - `POST /api/v1/auth/password-reset/request` and `/password-reset/confirm` — request and consume a single-use password reset token
 - `GET /api/v1/auth/me` — inspect the authenticated user/workspace
 - `POST /api/v1/customers` — create a customer
