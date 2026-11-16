@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import uuid
 import jwt
 from pwdlib import PasswordHash
 from .db import settings
@@ -22,6 +23,7 @@ def create_access_token(*, user_id: str, tenant_id: str, role: str, token_versio
         "tenant_id": tenant_id,
         "role": role,
         "token_version": token_version,
+        "jti": str(uuid.uuid4()),
         "iat": now,
         "exp": now + timedelta(minutes=settings.access_token_minutes),
     }
