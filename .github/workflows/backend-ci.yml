@@ -63,6 +63,8 @@ jobs:
         run: npm test
       - name: Build React WhatsApp dock
         working-directory: extension-react
+        env:
+          VITE_API_BASE: https://vantiq-mvp-production-97577cdb.up.railway.app
         run: npm run build
       - name: Package React WhatsApp dock
         run: python extension-react/package.py
