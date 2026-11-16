@@ -8,7 +8,7 @@
     "build:content": "vite build --config vite.content.config.ts",
     "build:worker": "vite build --config vite.worker.config.ts",
     "build": "npm run typecheck && npm run build:content && npm run build:worker && node scripts/copy-manifest.mjs",
-    "test": "npm run typecheck"
+    "test": "tsc -p tsconfig.test.json && node --test tests/*.test.mjs"
   },
   "dependencies": {
     "react": "19.3.1",
