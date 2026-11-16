@@ -82,7 +82,8 @@ export default function App({ onReadVisibleChat }: Props) {
       setTranscript("");
       setAuthorized(false);
       setDecision(null);
-      setAnalysisStatus("检测到 WhatsApp 客户对话切换，旧对话内容已清空。");
+      setCustomerId("");
+      setAnalysisStatus("检测到 WhatsApp 客户对话切换。旧对话已清空，请重新选择对应的 VANTIQ 客户。");
     };
     window.addEventListener("vantiq:conversation-changed", handleConversationChange);
     return () => window.removeEventListener("vantiq:conversation-changed", handleConversationChange);
