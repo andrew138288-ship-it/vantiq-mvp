@@ -74,6 +74,7 @@ def test_registration_requires_email_verification_before_login(verification_clie
         assert user is not None
         assert user.is_active is True
         assert user.is_email_verified is False
+        assert user.account_status == "pending_verification"
         assert token_row is not None
         assert token_row.token_hash != sent[0][1]
         assert verify_password(PASSWORD, user.password_hash)
@@ -93,6 +94,12 @@ def test_registration_requires_email_verification_before_login(verification_clie
     )
     assert verified.status_code == 200
     assert "free VANTIQ account is now active" in verified.json()["message"]
+    db = session_factory()
+    try:
+        activated = db.scalar(select(User).where(User.email == "new@example.com"))
+        assert activated.account_status == "free_active"
+    finally:
+        db.close()
 
     login_after = client.post(
         "/api/v1/auth/login",
