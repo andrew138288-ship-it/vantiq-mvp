@@ -4,7 +4,6 @@ import { parseTranscript } from "./transcript";
 type Customer = { id: string; display_name: string };
 type Session = { accessToken: string; user: { display_name?: string | null; email: string; role: string } };
 type LoginResponse = { access_token: string; token_type: string; user: Session["user"] };
-type AuthResponse = { access_token: string; user: Session["user"] };
 type Strategy = { name: string; objective: string; rationale: string; next_move: string; risk: string };
 type Decision = {
   customer_situation: string;
