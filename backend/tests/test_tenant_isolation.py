@@ -254,3 +254,37 @@ def test_login_endpoint_enforces_ip_rate_limit(isolated_client):
         assert limited.status_code == 429
     finally:
         limiter.reset()
+
+
+
+def test_conversation_context_rejects_more_than_twenty_messages(isolated_client):
+    client, token, ids, _ = isolated_client
+    headers = {"Authorization": f"Bearer {token}"}
+    created = client.post(
+        "/api/v1/conversations",
+        headers=headers,
+        json={"customer_id": ids["customer_a"], "channel": "whatsapp"},
+    )
+    assert created.status_code == 201
+    conversation_id = created.json()["id"]
+    authorized = client.post(
+        f"/api/v1/conversations/{conversation_id}/authorize-context",
+        headers=headers,
+    )
+    assert authorized.status_code == 200
+
+    for index in range(20):
+        response = client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=headers,
+            json={"direction": "inbound", "body": f"Visible message {index + 1}"},
+        )
+        assert response.status_code == 201
+
+    overflow = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers=headers,
+        json={"direction": "inbound", "body": "Message 21 must be rejected"},
+    )
+    assert overflow.status_code == 422
+    assert "cannot exceed 20 messages" in overflow.json()["detail"]
