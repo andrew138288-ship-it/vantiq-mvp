@@ -40,7 +40,7 @@ function watchConversationSwitches() {
       currentKey = nextKey;
     }
   });
-  if (document.body) observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+  if (document.body) observer.observe(document.body, { childList: true, subtree: true });
 }
 
 function mountDock() {
