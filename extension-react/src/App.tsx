@@ -61,7 +61,9 @@ export default function App({ onReadVisibleChat }: Props) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [verificationToken, setVerificationToken] = useState("");
-  const [authMode, setAuthMode] = useState<"login" | "register" | "verify">("login");
+  const [resetToken, setResetToken] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [authMode, setAuthMode] = useState<"login" | "register" | "verify" | "reset">("login");
   const [authStatus, setAuthStatus] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState("");
@@ -166,6 +168,45 @@ export default function App({ onReadVisibleChat }: Props) {
       setAuthStatus("如果该账户存在且仍需验证，新的验证邮件将发送至邮箱。旧验证码将失效。");
     } catch (error) {
       setAuthStatus(error instanceof Error ? error.message : "无法重新发送验证邮件");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function requestPasswordReset() {
+    if (!email.trim()) {
+      setAuthStatus("请先输入注册邮箱。");
+      return;
+    }
+    setBusy(true);
+    try {
+      await apiRequest("/auth/password-reset/request", {
+        method: "POST",
+        body: { email: email.trim() },
+      });
+      setAuthStatus("如果账户存在且已验证邮箱，密码重置说明将发送至邮箱。");
+    } catch (error) {
+      setAuthStatus(error instanceof Error ? error.message : "无法发送重置邮件");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmPasswordReset(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      await apiRequest("/auth/password-reset/confirm", {
+        method: "POST",
+        body: { token: resetToken.trim(), new_password: newPassword },
+      });
+      setAuthMode("login");
+      setResetToken("");
+      setNewPassword("");
+      setPassword("");
+      setAuthStatus("密码已重置，请使用新密码登录。");
+    } catch (error) {
+      setAuthStatus(error instanceof Error ? error.message : "密码重置失败");
     } finally {
       setBusy(false);
     }
@@ -320,6 +361,7 @@ export default function App({ onReadVisibleChat }: Props) {
               <div className="inline-form">
                 <button type="button" className="text-button" onClick={() => { setAuthMode("register"); setAuthStatus(""); }}>创建免费账户</button>
                 <button type="button" className="text-button" onClick={() => { setAuthMode("verify"); setAuthStatus("请输入邮箱收到的一次性验证码。"); }}>验证邮箱</button>
+                <button type="button" className="text-button" onClick={() => { setAuthMode("reset"); setAuthStatus(""); }}>忘记密码</button>
               </div>
             </form>
           )}
@@ -335,6 +377,20 @@ export default function App({ onReadVisibleChat }: Props) {
               <label htmlFor="vantiq-confirm-password">确认密码</label>
               <input id="vantiq-confirm-password" type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required minLength={12} maxLength={128} />
               <button className="primary full" disabled={busy}>{busy ? "正在提交…" : "注册免费账户"}</button>
+              <button type="button" className="text-button" onClick={() => { setAuthMode("login"); setAuthStatus(""); }}>返回登录</button>
+            </form>
+          )}
+          {authMode === "reset" && (
+            <form onSubmit={confirmPasswordReset}>
+              <h2>重置密码</h2>
+              <label htmlFor="vantiq-reset-email">账户邮箱</label>
+              <input id="vantiq-reset-email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              <button type="button" className="secondary full" onClick={requestPasswordReset} disabled={busy}>发送密码重置邮件</button>
+              <label htmlFor="vantiq-reset-token">邮件中的一次性验证码</label>
+              <input id="vantiq-reset-token" value={resetToken} onChange={(e) => setResetToken(e.target.value)} required minLength={32} maxLength={256} />
+              <label htmlFor="vantiq-new-password">新密码（至少 12 位）</label>
+              <input id="vantiq-new-password" type="password" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={12} maxLength={128} />
+              <button className="primary full" disabled={busy}>{busy ? "正在重置…" : "确认重置密码"}</button>
               <button type="button" className="text-button" onClick={() => { setAuthMode("login"); setAuthStatus(""); }}>返回登录</button>
             </form>
           )}
