@@ -245,6 +245,10 @@ export default function App({ onReadVisibleChat }: Props) {
       setCustomers((current) => [...current, created]);
       setCustomerId(created.id);
       setNewCustomer("");
+      setTranscript("");
+      setAuthorized(false);
+      setDecision(null);
+      setAnalysisStatus("客户已添加。请重新读取当前 WhatsApp 对话并确认授权后再分析。");
       setAuthStatus("客户已添加。");
     } catch (error) {
       setAuthStatus(error instanceof Error ? error.message : "添加客户失败");
