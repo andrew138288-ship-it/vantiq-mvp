@@ -3,10 +3,13 @@
   "name": "VANTIQ — World-Class Sales AI",
   "version": "0.2.0",
   "description": "A human-reviewed sales intelligence dock inside WhatsApp Web.",
-  "permissions": ["storage"],
+  "permissions": [
+    "storage"
+  ],
   "host_permissions": [
     "http://localhost:8000/*",
-    "https://vantiq-mvp-production.up.railway.app/*"
+    "https://vantiq-mvp-production.up.railway.app/*",
+    "https://vantiq-mvp-production-97577cdb.up.railway.app/*"
   ],
   "background": {
     "service_worker": "service-worker.js",
@@ -14,8 +17,12 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://web.whatsapp.com/*"],
-      "js": ["content.js"],
+      "matches": [
+        "https://web.whatsapp.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ]
