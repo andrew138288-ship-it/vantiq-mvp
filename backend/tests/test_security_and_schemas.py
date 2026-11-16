@@ -131,5 +131,7 @@ def test_production_settings_accept_strong_explicit_jwt_secret():
     configured = Settings(
         app_env="production",
         jwt_secret="a-secure-test-secret-with-more-than-32-characters",
+        ai_provider="openai",
+        openai_api_key="test-openai-key",
     )
     assert configured.app_env == "production"
