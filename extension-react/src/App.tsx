@@ -58,6 +58,10 @@ export default function App({ onReadVisibleChat }: Props) {
   const [session, setSession] = useState<Session | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [verificationToken, setVerificationToken] = useState("");
+  const [authMode, setAuthMode] = useState<"login" | "register" | "verify">("login");
   const [authStatus, setAuthStatus] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState("");
@@ -104,6 +108,68 @@ export default function App({ onReadVisibleChat }: Props) {
       }
     })();
   }, []);
+
+  async function registerAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (password !== confirmPassword) {
+      setAuthStatus("两次输入的密码不一致。");
+      return;
+    }
+    setBusy(true);
+    setAuthStatus("正在创建免费账户并发送验证邮件…");
+    try {
+      await apiRequest("/auth/register", {
+        method: "POST",
+        body: { email: email.trim(), password, display_name: displayName.trim() },
+      });
+      setAuthMode("verify");
+      setPassword("");
+      setConfirmPassword("");
+      setAuthStatus("如果该邮箱可以注册，验证邮件将发送至邮箱。请复制邮件中的一次性验证码。");
+    } catch (error) {
+      setAuthStatus(error instanceof Error ? error.message : "注册失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function verifyAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setAuthStatus("正在验证邮箱…");
+    try {
+      await apiRequest("/auth/verify-email", {
+        method: "POST",
+        body: { token: verificationToken.trim() },
+      });
+      setAuthMode("login");
+      setVerificationToken("");
+      setAuthStatus("邮箱验证成功。免费账户已激活，请登录。");
+    } catch (error) {
+      setAuthStatus(error instanceof Error ? error.message : "邮箱验证失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resendVerification() {
+    if (!email.trim()) {
+      setAuthStatus("请先输入注册邮箱。");
+      return;
+    }
+    setBusy(true);
+    try {
+      await apiRequest("/auth/resend-verification", {
+        method: "POST",
+        body: { email: email.trim() },
+      });
+      setAuthStatus("如果该账户存在且仍需验证，新的验证邮件将发送至邮箱。旧验证码将失效。");
+    } catch (error) {
+      setAuthStatus(error instanceof Error ? error.message : "无法重新发送验证邮件");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -242,15 +308,51 @@ export default function App({ onReadVisibleChat }: Props) {
       </div>
 
       {!session ? (
-        <form className="section" onSubmit={signIn}>
-          <h2>登录账户</h2>
-          <label htmlFor="vantiq-email">邮箱</label>
-          <input id="vantiq-email" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />
-          <label htmlFor="vantiq-password">密码</label>
-          <input id="vantiq-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-          <button className="primary" disabled={busy}>{busy ? "请稍候…" : "登录 VANTIQ"}</button>
+        <section className="section">
+          {authMode === "login" && (
+            <form onSubmit={signIn}>
+              <h2>登录账户</h2>
+              <label htmlFor="vantiq-email">邮箱</label>
+              <input id="vantiq-email" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              <label htmlFor="vantiq-password">密码</label>
+              <input id="vantiq-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+              <button className="primary full" disabled={busy}>{busy ? "请稍候…" : "登录 VANTIQ"}</button>
+              <div className="inline-form">
+                <button type="button" className="text-button" onClick={() => { setAuthMode("register"); setAuthStatus(""); }}>创建免费账户</button>
+                <button type="button" className="text-button" onClick={() => { setAuthMode("verify"); setAuthStatus("请输入邮箱收到的一次性验证码。"); }}>验证邮箱</button>
+              </div>
+            </form>
+          )}
+          {authMode === "register" && (
+            <form onSubmit={registerAccount}>
+              <h2>创建免费账户</h2>
+              <label htmlFor="vantiq-name">姓名</label>
+              <input id="vantiq-name" autoComplete="name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} required maxLength={160} />
+              <label htmlFor="vantiq-register-email">邮箱</label>
+              <input id="vantiq-register-email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              <label htmlFor="vantiq-register-password">密码（至少 12 位）</label>
+              <input id="vantiq-register-password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={12} maxLength={128} />
+              <label htmlFor="vantiq-confirm-password">确认密码</label>
+              <input id="vantiq-confirm-password" type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required minLength={12} maxLength={128} />
+              <button className="primary full" disabled={busy}>{busy ? "正在提交…" : "注册免费账户"}</button>
+              <button type="button" className="text-button" onClick={() => { setAuthMode("login"); setAuthStatus(""); }}>返回登录</button>
+            </form>
+          )}
+          {authMode === "verify" && (
+            <form onSubmit={verifyAccount}>
+              <h2>验证邮箱</h2>
+              <p className="human-review">请打开注册邮箱，复制 VANTIQ 验证邮件中的一次性验证码。验证码 24 小时内有效，重新发送后旧验证码失效。</p>
+              <label htmlFor="vantiq-verify-email">邮箱</label>
+              <input id="vantiq-verify-email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              <label htmlFor="vantiq-verification-token">邮箱验证码</label>
+              <input id="vantiq-verification-token" value={verificationToken} onChange={(e) => setVerificationToken(e.target.value)} required minLength={32} maxLength={256} />
+              <button className="primary full" disabled={busy}>{busy ? "正在验证…" : "确认验证邮箱"}</button>
+              <button type="button" className="secondary full" onClick={resendVerification} disabled={busy}>重新发送验证码</button>
+              <button type="button" className="text-button" onClick={() => { setAuthMode("login"); setAuthStatus(""); }}>返回登录</button>
+            </form>
+          )}
           <p className="status" role="status">{authStatus}</p>
-        </form>
+        </section>
       ) : (
         <>
           <section className="section account-row">
