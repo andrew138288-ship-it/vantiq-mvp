@@ -8,7 +8,6 @@ class RegisterRequest(BaseModel):
     email: str = Field(min_length=5, max_length=320)
     password: str = Field(min_length=12, max_length=128)
     display_name: str = Field(min_length=1, max_length=160)
-    tenant_name: str = Field(min_length=1, max_length=160)
 
     @field_validator("email")
     @classmethod
@@ -17,6 +16,14 @@ class RegisterRequest(BaseModel):
         if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value):
             raise ValueError("A valid email address is required")
         return value
+
+
+class RegistrationAccepted(BaseModel):
+    message: str
+
+
+class EmailVerificationConfirm(BaseModel):
+    token: str = Field(min_length=32, max_length=256)
 
 
 class LoginRequest(BaseModel):
