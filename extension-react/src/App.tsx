@@ -52,6 +52,9 @@ async function apiRequest<T>(
             body: { refresh_token: saved.refreshToken },
           }) as ApiReply;
           if (!renewed?.ok || !renewed.data || typeof renewed.data !== "object") {
+            const latest = await chrome.storage.session.get("vantiqSession");
+            const current = latest.vantiqSession as Session | undefined;
+            if (current && current.refreshToken !== saved.refreshToken) return current;
             await chrome.storage.session.remove("vantiqSession");
             window.dispatchEvent(new Event("vantiq:session-expired"));
             return null;
