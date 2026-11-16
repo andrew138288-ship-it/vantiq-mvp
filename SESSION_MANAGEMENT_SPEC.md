@@ -1,6 +1,6 @@
 # VANTIQ account session management specification
 
-Status: implementation requirement for the MVP; this document does not claim that refresh sessions are implemented.
+Status: implementation is present on the `feat/react-whatsapp-dock` branch. CI and real end-to-end validation are still required before this can be considered complete or production-ready.
 
 ## Goals
 
