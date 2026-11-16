@@ -15,13 +15,13 @@ The build writes the unpacked extension to `dist/`. The ZIP package is written t
 
 ## Load in Chrome
 
-1. Start the VANTIQ FastAPI backend at `http://localhost:8000`.
+1. For the device-test package, the API is preconfigured to `https://vantiq-mvp-production-97577cdb.up.railway.app`. For local development, start the VANTIQ FastAPI backend at `http://localhost:8000` and build without `VITE_API_BASE`.
 2. Open `chrome://extensions` in desktop Chrome.
 3. Enable Developer mode and choose **Load unpacked**.
 4. Select this package's `dist/` folder.
 5. Open WhatsApp Web; the dock appears inside the page on the right.
 
-Set `VITE_API_BASE` at build time to change the backend origin. The corresponding host must also be listed in `manifest.json` permissions.
+Set `VITE_API_BASE` at build time to change the backend origin. The corresponding host must also be listed in `manifest.json` permissions. The CI-generated installable package is configured for the isolated device-test API, not the production API.
 
 ## Privacy and safety
 
