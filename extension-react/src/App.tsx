@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { parseTranscript } from "./transcript";
 
 type Customer = { id: string; display_name: string };
@@ -77,6 +77,17 @@ export default function App({ onReadVisibleChat }: Props) {
   }
 
   useEffect(() => {
+    const handleConversationChange = () => {
+      setTranscript("");
+      setAuthorized(false);
+      setDecision(null);
+      setAnalysisStatus("检测到 WhatsApp 客户对话切换，旧对话内容已清空。");
+    };
+    window.addEventListener("vantiq:conversation-changed", handleConversationChange);
+    return () => window.removeEventListener("vantiq:conversation-changed", handleConversationChange);
+  }, []);
+
+  useEffect(() => {
     void (async () => {
       const stored = await chrome.storage.session.get("vantiqSession");
       const saved = stored.vantiqSession as Session | undefined;
@@ -93,7 +104,7 @@ export default function App({ onReadVisibleChat }: Props) {
     })();
   }, []);
 
-  async function signIn(event: React.FormEvent<HTMLFormElement>) {
+  async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     setAuthStatus("正在登录…");
@@ -248,7 +259,7 @@ export default function App({ onReadVisibleChat }: Props) {
           <section className="section">
             <h2>当前客户</h2>
             <label htmlFor="vantiq-customer">选择客户</label>
-            <select id="vantiq-customer" value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+            <select id="vantiq-customer" value={customerId} onChange={(e) => { setCustomerId(e.target.value); setTranscript(""); setAuthorized(false); setDecision(null); }}>
               <option value="">请选择客户</option>
               {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.display_name}</option>)}
             </select>
