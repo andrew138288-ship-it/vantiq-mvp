@@ -23,16 +23,24 @@ function readVisibleChat(limit: number): string {
   return lines.join("\n");
 }
 
+function getConversationKey(): string {
+  const header = document.querySelector<HTMLElement>('[data-testid="conversation-info-header"]');
+  const title = header?.querySelector<HTMLElement>('span[title]')?.getAttribute("title");
+  return title?.trim() || header?.getAttribute("aria-label")?.trim() || "";
+}
+
 function watchConversationSwitches() {
-  let currentKey = document.querySelector<HTMLElement>('[data-testid="conversation-info-header"]')?.innerText?.trim() || "";
+  let currentKey = getConversationKey();
   const observer = new MutationObserver(() => {
-    const nextKey = document.querySelector<HTMLElement>('[data-testid="conversation-info-header"]')?.innerText?.trim() || "";
-    if (nextKey !== currentKey) {
+    const nextKey = getConversationKey();
+    if (nextKey && currentKey && nextKey !== currentKey) {
       currentKey = nextKey;
       window.dispatchEvent(new Event("vantiq:conversation-changed"));
+    } else if (nextKey && !currentKey) {
+      currentKey = nextKey;
     }
   });
-  if (document.body) observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+  if (document.body) observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["title", "aria-label"] });
 }
 
 function mountDock() {
