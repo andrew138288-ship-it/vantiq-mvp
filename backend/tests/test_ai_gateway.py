@@ -47,13 +47,49 @@ def test_universal_sales_scope_and_b2b_b2c():
     assert "B2B or B2C" in instructions
 
 
-def test_missing_api_key_fails_closed(monkeypatch):
+def test_mock_provider_returns_a_valid_two_strategy_decision(monkeypatch):
+    import asyncio
+    from app.db import settings
+    from app.services.ai_gateway import generate_sales_assist
+
+    monkeypatch.setattr(settings, "ai_provider", "mock")
+    decision, model = asyncio.run(
+        generate_sales_assist(
+            conversation_text="Customer: I am comparing suppliers.",
+            response_locale="zh-CN",
+        )
+    )
+    assert model == "mock-sales-v1"
+    assert decision.selected_strategy in {"strategy_1", "strategy_2"}
+    assert decision.strategy_1.name != decision.strategy_2.name
+    assert decision.suggested_reply
+    assert decision.before_sending
+
+
+def test_missing_openai_key_fails_closed(monkeypatch):
     import asyncio
     import pytest
     from app.db import settings
     from app.services.ai_gateway import AIProviderNotConfigured, generate_sales_assist
 
+    monkeypatch.setattr(settings, "ai_provider", "openai")
     monkeypatch.setattr(settings, "openai_api_key", None)
+    with pytest.raises(AIProviderNotConfigured):
+        asyncio.run(
+            generate_sales_assist(
+                conversation_text="Customer: Hello",
+                response_locale="en-US",
+            )
+        )
+
+
+def test_unknown_provider_fails_closed(monkeypatch):
+    import asyncio
+    import pytest
+    from app.db import settings
+    from app.services.ai_gateway import AIProviderNotConfigured, generate_sales_assist
+
+    monkeypatch.setattr(settings, "ai_provider", "unknown-provider")
     with pytest.raises(AIProviderNotConfigured):
         asyncio.run(
             generate_sales_assist(
