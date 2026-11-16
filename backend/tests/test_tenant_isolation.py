@@ -288,3 +288,118 @@ def test_conversation_context_rejects_more_than_twenty_messages(isolated_client)
     )
     assert overflow.status_code == 422
     assert "cannot exceed 20 messages" in overflow.json()["detail"]
+
+
+
+def test_customer_deletion_removes_its_conversations_messages_and_memory(isolated_client):
+    from app.models import CustomerMemory
+
+    client, token, ids, session_factory = isolated_client
+    headers = {"Authorization": f"Bearer {token}"}
+    created_conversation = client.post(
+        "/api/v1/conversations",
+        headers=headers,
+        json={"customer_id": ids["customer_a"], "channel": "whatsapp"},
+    )
+    assert created_conversation.status_code == 201
+    conversation_id = created_conversation.json()["id"]
+    authorized = client.post(
+        f"/api/v1/conversations/{conversation_id}/authorize-context",
+        headers=headers,
+    )
+    assert authorized.status_code == 200
+    added_message = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers=headers,
+        json={"direction": "inbound", "body": "Delete this customer data"},
+    )
+    assert added_message.status_code == 201
+
+    db = session_factory()
+    try:
+        db.add(CustomerMemory(
+            tenant_id=uuid.UUID(ids["tenant_a"]),
+            customer_id=uuid.UUID(ids["customer_a"]),
+            summary="Customer-specific memory",
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    deleted = client.delete(f"/api/v1/customers/{ids['customer_a']}", headers=headers)
+    assert deleted.status_code == 204
+
+    db = session_factory()
+    try:
+        assert db.get(Customer, uuid.UUID(ids["customer_a"])) is None
+        assert db.get(Conversation, uuid.UUID(conversation_id)) is None
+        assert db.query(Message).filter(
+            Message.conversation_id == uuid.UUID(conversation_id)
+        ).count() == 0
+        assert db.query(CustomerMemory).filter(
+            CustomerMemory.customer_id == uuid.UUID(ids["customer_a"])
+        ).count() == 0
+    finally:
+        db.close()
+
+
+def test_customer_deletion_cannot_cross_workspace_boundary(isolated_client):
+    client, token, ids, session_factory = isolated_client
+    response = client.delete(
+        f"/api/v1/customers/{ids['customer_b']}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 404
+
+    db = session_factory()
+    try:
+        assert db.get(Customer, uuid.UUID(ids["customer_b"])) is not None
+    finally:
+        db.close()
+
+
+def test_conversation_deletion_removes_messages_and_is_tenant_scoped(isolated_client):
+    client, token, ids, session_factory = isolated_client
+    headers = {"Authorization": f"Bearer {token}"}
+    created = client.post(
+        "/api/v1/conversations",
+        headers=headers,
+        json={"customer_id": ids["customer_a"], "channel": "whatsapp"},
+    )
+    assert created.status_code == 201
+    conversation_id = created.json()["id"]
+    client.post(
+        f"/api/v1/conversations/{conversation_id}/authorize-context",
+        headers=headers,
+    )
+    added = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers=headers,
+        json={"direction": "inbound", "body": "Conversation content"},
+    )
+    assert added.status_code == 201
+
+    deleted = client.delete(f"/api/v1/conversations/{conversation_id}", headers=headers)
+    assert deleted.status_code == 204
+    missing = client.get(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers=headers,
+    )
+    assert missing.status_code == 404
+
+    foreign_delete = client.delete(
+        f"/api/v1/conversations/{ids['conversation_b']}",
+        headers=headers,
+    )
+    assert foreign_delete.status_code == 404
+
+    db = session_factory()
+    try:
+        assert db.query(Message).filter(
+            Message.conversation_id == uuid.UUID(conversation_id)
+        ).count() == 0
+        assert db.query(Conversation).filter(
+            Conversation.id == uuid.UUID(ids["conversation_b"])
+        ).count() == 1
+    finally:
+        db.close()
