@@ -403,3 +403,23 @@ def test_conversation_deletion_removes_messages_and_is_tenant_scoped(isolated_cl
         ).count() == 1
     finally:
         db.close()
+
+
+def test_account_export_contains_current_workspace_data_only_and_no_secrets(isolated_client):
+    client, token, ids, session_factory = isolated_client
+    headers = {"Authorization": f"Bearer {token}"}
+    response = client.get("/api/v1/auth/export", headers=headers)
+    assert response.status_code == 200
+    assert "attachment" in response.headers.get("content-disposition", "")
+    data = response.json()
+
+    assert data["scope"] == "account_profile_and_currently_selected_workspace"
+    assert data["account"]["email"] == "a@example.com"
+    assert data["workspace"]["id"] == ids["tenant_a"]
+    assert {row["id"] for row in data["customers"]} == {ids["customer_a"]}
+    assert all(row["id"] != ids["customer_b"] for row in data["customers"])
+    assert all("Private message from workspace B" != row["body"] for row in data["messages"])
+    assert "password_hash" not in data["account"]
+    assert "refresh_token" not in data
+    assert "token_hash" not in str(data)
+
