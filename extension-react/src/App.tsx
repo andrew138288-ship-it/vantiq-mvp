@@ -21,6 +21,7 @@ type Decision = {
 type SalesAssistResponse = { decision: Decision; requires_human_review: boolean };
 type ApiReply = { ok: boolean; data?: unknown; error?: string; status?: number };
 type Props = { onReadVisibleChat: (limit: number) => string };
+let refreshInFlight: Promise<Session | null> | null = null;
 
 async function apiRequest<T>(
   path: string,
@@ -39,23 +40,33 @@ async function apiRequest<T>(
   if (!result?.ok && result.status === 401 && token && path !== "/auth/refresh") {
     const stored = await chrome.storage.session.get("vantiqSession");
     const saved = stored.vantiqSession as Session | undefined;
-    if (saved?.refreshToken) {
-      const renewed = await chrome.runtime.sendMessage({
-        type: "VANTIQ_API_REQUEST",
-        path: "/auth/refresh",
-        method: "POST",
-        body: { refresh_token: saved.refreshToken },
-      }) as ApiReply;
-      if (renewed?.ok && renewed.data && typeof renewed.data === "object") {
-        const tokens = renewed.data as { access_token: string; refresh_token: string };
-        const updated = { ...saved, accessToken: tokens.access_token, refreshToken: tokens.refresh_token };
-        await chrome.storage.session.set({ vantiqSession: updated });
-        window.dispatchEvent(new CustomEvent("vantiq:session-refreshed", { detail: updated }));
-        result = await send(path, updated.accessToken, options.body);
-      } else {
-        await chrome.storage.session.remove("vantiqSession");
-        window.dispatchEvent(new Event("vantiq:session-expired"));
+    if (saved?.accessToken && saved.accessToken !== token) {
+      result = await send(path, saved.accessToken, options.body);
+    } else if (saved?.refreshToken) {
+      if (!refreshInFlight) {
+        refreshInFlight = (async () => {
+          const renewed = await chrome.runtime.sendMessage({
+            type: "VANTIQ_API_REQUEST",
+            path: "/auth/refresh",
+            method: "POST",
+            body: { refresh_token: saved.refreshToken },
+          }) as ApiReply;
+          if (!renewed?.ok || !renewed.data || typeof renewed.data !== "object") {
+            await chrome.storage.session.remove("vantiqSession");
+            window.dispatchEvent(new Event("vantiq:session-expired"));
+            return null;
+          }
+          const tokens = renewed.data as { access_token: string; refresh_token: string };
+          const updated = { ...saved, accessToken: tokens.access_token, refreshToken: tokens.refresh_token };
+          await chrome.storage.session.set({ vantiqSession: updated });
+          window.dispatchEvent(new CustomEvent("vantiq:session-refreshed", { detail: updated }));
+          return updated;
+        })();
       }
+      let updated: Session | null = null;
+      try { updated = await refreshInFlight; }
+      finally { refreshInFlight = null; }
+      if (updated) result = await send(path, updated.accessToken, options.body);
     }
   }
   if (!result?.ok) throw new Error(result?.error || "无法连接 VANTIQ 后端");
