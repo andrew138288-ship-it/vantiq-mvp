@@ -350,8 +350,21 @@ def refresh_access_token(request: Request, payload: RefreshRequest, db: Session 
         raise HTTPException(status_code=401, detail="Refresh token is invalid or expired")
     consumed = db.execute(update(RefreshSession).where(RefreshSession.id == row.id, RefreshSession.revoked_at.is_(None), RefreshSession.expires_at > now).values(revoked_at=now, last_used_at=now).execution_options(synchronize_session=False))
     if consumed.rowcount != 1:
+        # Another request may have rotated this token after our initial read.
+        # Treat the losing concurrent request as token reuse and revoke the
+        # whole family, rather than leaving the winning descendant active.
+        family_id = row.family_id
         db.rollback()
-        raise HTTPException(status_code=401, detail="Refresh token is invalid or expired")
+        db.execute(
+            update(RefreshSession)
+            .where(
+                RefreshSession.family_id == family_id,
+                RefreshSession.revoked_at.is_(None),
+            )
+            .values(revoked_at=now)
+        )
+        db.commit()
+        raise HTTPException(status_code=401, detail="Refresh token reuse detected; please sign in again")
     user = db.get(User, row.user_id)
     if user is None or not user.is_active or user.account_status != "free_active" or not user.is_email_verified:
         db.rollback()
