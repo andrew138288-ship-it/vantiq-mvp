@@ -107,6 +107,40 @@ export default function App({ onReadVisibleChat }: Props) {
     setCustomers(result);
   }
 
+  async function loadSessions(token: string) {
+    const result = await apiRequest<Array<{session_id:string;created_at:string;last_used_at:string|null;expires_at:string;device:string}>>("/auth/sessions", {}, token);
+    setActiveSessions(result);
+  }
+
+  async function revokeOneSession(sessionId: string) {
+    if (!session) return;
+    try {
+      await apiRequest(`/auth/sessions/${sessionId}`, { method: "DELETE" }, session.accessToken);
+      await loadSessions(session.accessToken);
+      setAuthStatus("已撤销所选登录设备。");
+    } catch (error) {
+      setAuthStatus(error instanceof Error ? error.message : "撤销设备失败");
+    }
+  }
+
+  async function revokeAllSessions() {
+    if (!session) return;
+    try {
+      await apiRequest("/auth/logout-all", { method: "POST" }, session.accessToken);
+      await chrome.storage.session.remove("vantiqSession");
+      setSession(null);
+      setCustomers([]);
+      setActiveSessions([]);
+      setCustomerId("");
+      setDecision(null);
+      setTranscript("");
+      setAuthorized(false);
+      setAuthStatus("所有设备已退出，请重新登录。");
+    } catch (error) {
+      setAuthStatus(error instanceof Error ? error.message : "退出所有设备失败");
+    }
+  }
+
   useEffect(() => {
     const handleConversationChange = () => {
       setTranscript("");
@@ -133,6 +167,9 @@ export default function App({ onReadVisibleChat }: Props) {
         const restored = { ...saved, user };
         setSession(restored);
         await loadCustomers(saved.accessToken);
+        await loadSessions(saved.accessToken);
+        const latest = await chrome.storage.session.get("vantiqSession");
+        if (latest.vantiqSession) setSession(latest.vantiqSession as Session);
       } catch {
         await chrome.storage.session.remove("vantiqSession");
         setAuthStatus("登录状态已失效，请重新登录。");
@@ -255,6 +292,7 @@ export default function App({ onReadVisibleChat }: Props) {
       setSession(restored);
       setPassword("");
       await loadCustomers(restored.accessToken);
+      await loadSessions(restored.accessToken);
       setAuthStatus("登录成功。");
     } catch (error) {
       setAuthStatus(error instanceof Error ? error.message : "登录失败");
@@ -357,6 +395,7 @@ export default function App({ onReadVisibleChat }: Props) {
     await chrome.storage.session.remove("vantiqSession");
     setSession(null);
     setCustomers([]);
+    setActiveSessions([]);
     setCustomerId("");
     setDecision(null);
     setTranscript("");
@@ -450,6 +489,22 @@ export default function App({ onReadVisibleChat }: Props) {
           <section className="section account-row">
             <div><h2>工作区</h2><p>{session.user.display_name || session.user.email}</p></div>
             <button className="text-button" onClick={signOut}>退出</button>
+          </section>
+
+          <section className="section">
+            <div className="account-row">
+              <h2>登录设备</h2>
+              <button className="text-button" onClick={() => void loadSessions(session.accessToken)}>刷新</button>
+            </div>
+            {activeSessions.length === 0 ? <p className="human-review">暂时没有可显示的有效登录设备。</p> : activeSessions.map((item) => (
+              <div className="strategy" key={item.session_id}>
+                <b>{item.device}</b>
+                <p>登录时间：{new Date(item.created_at).toLocaleString()}</p>
+                <p>有效至：{new Date(item.expires_at).toLocaleString()}</p>
+                <button className="text-button" onClick={() => void revokeOneSession(item.session_id)}>退出此设备</button>
+              </div>
+            ))}
+            <button className="secondary full" onClick={() => void revokeAllSessions()}>退出所有设备</button>
           </section>
 
           <section className="section">
