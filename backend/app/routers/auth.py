@@ -128,12 +128,25 @@ def verify_email(
     if user is None or not user.is_active:
         raise HTTPException(status_code=400, detail="Verification token is invalid or expired")
 
+    consumed = db.execute(
+        update(EmailVerificationToken)
+        .where(
+            EmailVerificationToken.id == token.id,
+            EmailVerificationToken.used_at.is_(None),
+        )
+        .values(used_at=now)
+    )
+    if consumed.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Verification token is invalid or expired")
+
     user.is_email_verified = True
     user.account_status = "free_active"
     db.execute(
         update(EmailVerificationToken)
         .where(
             EmailVerificationToken.user_id == user.id,
+            EmailVerificationToken.id != token.id,
             EmailVerificationToken.used_at.is_(None),
         )
         .values(used_at=now)
@@ -280,11 +293,27 @@ def confirm_password_reset(
     if user is None or not user.is_active or user.account_status != "free_active" or not user.is_email_verified:
         raise HTTPException(status_code=400, detail="Reset token is invalid or expired")
 
+    consumed = db.execute(
+        update(PasswordResetToken)
+        .where(
+            PasswordResetToken.id == reset.id,
+            PasswordResetToken.used_at.is_(None),
+        )
+        .values(used_at=now)
+    )
+    if consumed.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Reset token is invalid or expired")
+
     user.password_hash = hash_password(payload.new_password)
     user.token_version += 1
     db.execute(
         update(PasswordResetToken)
-        .where(PasswordResetToken.user_id == user.id, PasswordResetToken.used_at.is_(None))
+        .where(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.id != reset.id,
+            PasswordResetToken.used_at.is_(None),
+        )
         .values(used_at=now)
     )
     db.commit()
