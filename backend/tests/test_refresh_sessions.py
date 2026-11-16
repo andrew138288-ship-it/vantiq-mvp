@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime, timedelta, timezone
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
@@ -114,3 +115,44 @@ def test_logout_all_revokes_sessions_and_access_tokens(session_client):
     assert client.get("/api/v1/auth/me", headers=headers).status_code == 401
     assert client.post("/api/v1/auth/refresh", json={"refresh_token": first["refresh_token"]}).status_code == 401
     assert client.post("/api/v1/auth/refresh", json={"refresh_token": second["refresh_token"]}).status_code == 401
+
+
+
+def test_expired_refresh_token_is_rejected_and_revoked(session_client):
+    client, factory = session_client
+    initial = login(client)
+    db = factory()
+    try:
+        row = db.scalar(select(RefreshSession))
+        row.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.post("/api/v1/auth/refresh", json={"refresh_token": initial["refresh_token"]})
+    assert response.status_code == 401
+
+    db = factory()
+    try:
+        row = db.scalar(select(RefreshSession))
+        assert row.revoked_at is not None
+    finally:
+        db.close()
+
+
+def test_logout_is_idempotent_and_revokes_refresh_token(session_client):
+    client, factory = session_client
+    initial = login(client)
+    payload = {"refresh_token": initial["refresh_token"]}
+    first = client.post("/api/v1/auth/logout", json=payload)
+    second = client.post("/api/v1/auth/logout", json=payload)
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert client.post("/api/v1/auth/refresh", json=payload).status_code == 401
+
+    db = factory()
+    try:
+        row = db.scalar(select(RefreshSession))
+        assert row.revoked_at is not None
+    finally:
+        db.close()
