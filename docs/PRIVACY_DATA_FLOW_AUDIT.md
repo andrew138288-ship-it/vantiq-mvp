@@ -37,9 +37,9 @@
 
 ### P0 — Message retention and context scope mismatch
 
-The extension UI lets the user select 5/10/15/20 visible messages, but the backend sales-assist route queries up to 40 messages previously stored for the same conversation. Repeated user-authorized reads can therefore cause the AI request to include more than the latest UI-selected batch.
+The extension UI lets the user select 5/10/15/20 visible messages and creates a **new conversation record for each analysis attempt**, then posts only the selected latest messages to that record. Therefore the ordinary current UI flow does not accumulate prior batches into the same conversation. However, the backend sales-assist route independently queries up to 40 messages and does not receive an explicit selected-message batch ID or enforce the UI's 5/10/15/20 limit. Other API clients or future UI changes could therefore submit a larger context than the intended product setting.
 
-**Required before pilot:** enforce the chosen context limit/version server-side; ensure only the messages explicitly selected for the current analysis are included; prevent stale messages from previous reads or prior customer context from being silently reused. Add tests proving a 5/10/15/20 selection cannot expand into a 40-message history.
+**Required before pilot:** enforce the selected context limit server-side and bind analysis to the exact message batch/version authorized by the user. Add tests proving the server rejects or excludes messages outside that authorized batch. Preserve the current fresh-conversation-per-analysis isolation unless a deliberate product change is approved.
 
 ### P0 — Retention and deletion are not implemented as a complete lifecycle
 
