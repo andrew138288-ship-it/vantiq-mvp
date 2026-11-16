@@ -58,14 +58,22 @@ async function apiRequest<T>(
           }
           const tokens = renewed.data as { access_token: string; refresh_token: string };
           const updated = { ...saved, accessToken: tokens.access_token, refreshToken: tokens.refresh_token };
+          // Do not resurrect a session after logout or overwrite a newer login
+          // if this refresh completed after the user changed authentication state.
+          const latest = await chrome.storage.session.get("vantiqSession");
+          const current = latest.vantiqSession as Session | undefined;
+          if (!current || current.refreshToken !== saved.refreshToken) return current ?? null;
           await chrome.storage.session.set({ vantiqSession: updated });
           window.dispatchEvent(new CustomEvent("vantiq:session-refreshed", { detail: updated }));
           return updated;
         })();
       }
+      const pendingRefresh = refreshInFlight;
       let updated: Session | null = null;
-      try { updated = await refreshInFlight; }
-      finally { refreshInFlight = null; }
+      try { updated = await pendingRefresh; }
+      finally {
+        if (refreshInFlight === pendingRefresh) refreshInFlight = null;
+      }
       if (updated) result = await send(path, updated.accessToken, options.body);
     }
   }
