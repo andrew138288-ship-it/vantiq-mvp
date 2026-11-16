@@ -42,7 +42,9 @@ chrome.runtime.onMessage.addListener((message: ApiRequest, sender, sendResponse)
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const detail = typeof data.detail === "string" ? data.detail : "VANTIQ API 请求失败。";
+        const detail = typeof data.detail === "string"
+          ? data.detail
+          : (typeof data.detail?.message === "string" ? data.detail.message : "VANTIQ API 请求失败。");
         sendResponse({ ok: false, error: detail, status: response.status });
         return;
       }
