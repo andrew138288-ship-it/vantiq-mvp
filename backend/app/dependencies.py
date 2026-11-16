@@ -37,7 +37,7 @@ def get_current_principal(
     except (jwt.PyJWTError, KeyError, ValueError, TypeError):
         raise unauthorized
     user = db.get(User, user_id)
-    if user is None or not user.is_active:
+    if user is None or not user.is_active or user.account_status != "free_active":
         raise unauthorized
     if claims.get("token_version", 0) != user.token_version:
         raise unauthorized
