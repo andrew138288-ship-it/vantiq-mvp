@@ -80,6 +80,7 @@ def register(request: Request, payload: RegisterRequest, db: Session = Depends(g
         password_hash=hash_password(payload.password),
         is_active=True,
         is_email_verified=False,
+        account_status="pending_verification",
     )
     try:
         db.add(tenant)
@@ -128,6 +129,7 @@ def verify_email(
         raise HTTPException(status_code=400, detail="Verification token is invalid or expired")
 
     user.is_email_verified = True
+    user.account_status = "free_active"
     db.execute(
         update(EmailVerificationToken)
         .where(
@@ -148,7 +150,7 @@ def resend_verification(
     db: Session = Depends(get_db),
 ):
     user = db.scalar(select(User).where(User.email == payload.email))
-    if user is None or not user.is_active or user.is_email_verified:
+    if user is None or not user.is_active or user.account_status != "pending_verification":
         return {"message": RESEND_MESSAGE}
 
     raw_token = _new_verification_token(db, user)
@@ -164,9 +166,9 @@ def resend_verification(
 @limiter.limit("5/minute")
 def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.email == payload.email))
-    if user is None or not user.is_active or not verify_password(payload.password, user.password_hash):
+    if user is None or not user.is_active or user.account_status in {"suspended", "closed"} or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Email or password is incorrect")
-    if not user.is_email_verified:
+    if user.account_status == "pending_verification" or not user.is_email_verified:
         raise HTTPException(
             status_code=403,
             detail={
@@ -229,7 +231,7 @@ def request_password_reset(
     # Always return the same response to prevent account enumeration.
     generic_response = {"message": "If the account exists, password reset instructions will be sent."}
     user = db.scalar(select(User).where(User.email == payload.email))
-    if user is None or not user.is_active or not user.is_email_verified:
+    if user is None or not user.is_active or user.account_status != "free_active" or not user.is_email_verified:
         return generic_response
 
     now = datetime.now(timezone.utc)
@@ -275,7 +277,7 @@ def confirm_password_reset(
         raise HTTPException(status_code=400, detail="Reset token is invalid or expired")
 
     user = db.get(User, reset.user_id)
-    if user is None or not user.is_active or not user.is_email_verified:
+    if user is None or not user.is_active or user.account_status != "free_active" or not user.is_email_verified:
         raise HTTPException(status_code=400, detail="Reset token is invalid or expired")
 
     user.password_hash = hash_password(payload.new_password)
