@@ -31,8 +31,9 @@ Initial workflow:
 ## Implemented backend foundation
 - FastAPI modular monolith and PostgreSQL 16
 - SQLAlchemy 2.x models and Alembic migrations
-- User registration and login with Argon2 password hashing
-- JWT bearer authentication and active tenant-membership verification
+- Free account registration with Argon2 password hashing and required email verification before login
+- Single-use, hashed email-verification and password-reset tokens with expiry and resend flows
+- JWT bearer authentication, active tenant-membership verification, and token-version revocation after password reset
 - Tenant-scoped customer create/list/read/update APIs
 - Conversation creation tied to a customer in the authenticated tenant
 - Separate explicit context-authorization endpoint before message ingestion
@@ -42,7 +43,7 @@ Initial workflow:
 
 ## React Chrome extension
 
-The new implementation is in `extension-react/` and uses TypeScript, React, Vite, and Chrome Manifest V3. It mounts a right-side dock inside WhatsApp Web using Shadow DOM isolation. The previous plain-JavaScript extension in `extension/` is retained temporarily as a legacy implementation until the React version is accepted.
+The new implementation is in `extension-react/` and uses TypeScript, React, Vite, and Chrome Manifest V3. It mounts a right-side dock inside WhatsApp Web using Shadow DOM isolation. The account screen supports login, free registration, email verification/resend, and password reset. Email delivery requires SMTP environment variables; CI tests stub email delivery. The previous plain-JavaScript extension in `extension/` is retained temporarily as a legacy implementation until the React version is accepted.
 
 Build the extension:
 
@@ -66,8 +67,11 @@ Load in desktop Chrome:
 
 ## Backend API endpoints
 
-- `POST /api/v1/auth/register` — create a user and first workspace
-- `POST /api/v1/auth/login` — authenticate and receive a bearer token
+- `POST /api/v1/auth/register` — create a pending free account; sends a verification email and returns no access token
+- `POST /api/v1/auth/verify-email` — consume a one-time verification token and activate the free account
+- `POST /api/v1/auth/resend-verification` — resend a verification token, with a generic anti-enumeration response
+- `POST /api/v1/auth/login` — authenticate verified users and receive a bearer token
+- `POST /api/v1/auth/password-reset/request` and `/password-reset/confirm` — request and consume a single-use password reset token
 - `GET /api/v1/auth/me` — inspect the authenticated user/workspace
 - `POST /api/v1/customers` — create a customer
 - `GET /api/v1/customers` — list customers in the current tenant
@@ -98,4 +102,4 @@ Docker is optional. The backend requires a reachable PostgreSQL 16 database. Set
 
 ## Current limitations
 
-This remains an early MVP, not production-ready. The React extension has passed CI typechecking, unit tests, build, and packaging, but still needs manual validation in a real signed-in WhatsApp Web session, including DOM-selector resilience and conversation-switch behavior. Account verification, production secret management, audit logging, customer memory APIs, and live backend deployment remain separate work. No production deployment has been performed.
+This remains an early MVP, not production-ready. The React extension has passed CI typechecking, unit tests, build, and packaging, but still needs manual validation in a real signed-in WhatsApp Web session, including DOM-selector resilience and conversation-switch behavior. Production SMTP configuration, final Terms of Service and Privacy Policy content/acceptance, production secret management, audit logging, customer memory APIs, and live backend deployment remain separate work. The email verification and password reset flows are implemented and CI-tested, but have not yet been tested against a real SMTP provider. No production deployment has been performed.
