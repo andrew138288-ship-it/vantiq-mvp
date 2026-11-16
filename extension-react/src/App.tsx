@@ -2,7 +2,8 @@ import { useEffect, useState, type FormEvent } from "react";
 import { parseTranscript } from "./transcript";
 
 type Customer = { id: string; display_name: string };
-type Session = { accessToken: string; user: { display_name?: string; email: string; role: string } };
+type Session = { accessToken: string; user: { display_name?: string | null; email: string; role: string } };
+type LoginResponse = { access_token: string; token_type: string; user: Session["user"] };
 type AuthResponse = { access_token: string; user: Session["user"] };
 type Strategy = { name: string; objective: string; rationale: string; next_move: string; risk: string };
 type Decision = {
@@ -110,14 +111,15 @@ export default function App({ onReadVisibleChat }: Props) {
     setBusy(true);
     setAuthStatus("正在登录…");
     try {
-      const result = await apiRequest<Session>("/auth/login", {
+      const result = await apiRequest<LoginResponse>("/auth/login", {
         method: "POST",
         body: { email: email.trim(), password },
       });
-      await chrome.storage.session.set({ vantiqSession: result });
-      setSession(result);
+      const restored: Session = { accessToken: result.access_token, user: result.user };
+      await chrome.storage.session.set({ vantiqSession: restored });
+      setSession(restored);
       setPassword("");
-      await loadCustomers(result.accessToken);
+      await loadCustomers(restored.accessToken);
       setAuthStatus("登录成功。");
     } catch (error) {
       setAuthStatus(error instanceof Error ? error.message : "登录失败");
