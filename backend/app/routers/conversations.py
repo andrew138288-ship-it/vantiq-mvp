@@ -1,13 +1,14 @@
 import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from ..dependencies import get_db, get_current_principal
 from ..models import Customer, Conversation, Message
 from ..schemas import ConversationCreate, ConversationPublic, MessageCreate, MessagePublic
 
 router = APIRouter(tags=["conversations"])
+MAX_AUTHORIZED_MESSAGES = 20
 
 
 def _get_conversation(db: Session, conversation_id: uuid.UUID, tenant_id: uuid.UUID) -> Conversation:
@@ -77,6 +78,17 @@ def add_message(
         raise HTTPException(
             status_code=403,
             detail="Explicitly authorize this conversation context before adding messages",
+        )
+    message_count = db.scalar(
+        select(func.count(Message.id)).where(
+            Message.conversation_id == conversation.id,
+            Message.tenant_id == principal["tenant_id"],
+        )
+    ) or 0
+    if message_count >= MAX_AUTHORIZED_MESSAGES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"A single analysis context cannot exceed {MAX_AUTHORIZED_MESSAGES} messages",
         )
     message = Message(
         tenant_id=principal["tenant_id"],
