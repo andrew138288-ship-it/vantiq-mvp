@@ -31,7 +31,22 @@ function getConversationKey(): string {
 
 function watchConversationSwitches() {
   let currentKey = getConversationKey();
-  const observer = new MutationObserver(() => {
+  let headerObserver: MutationObserver | null = null;
+
+  const observeHeader = () => {
+    headerObserver?.disconnect();
+    const header = document.querySelector<HTMLElement>('[data-testid="conversation-info-header"]');
+    if (!header) return;
+    headerObserver = new MutationObserver(checkConversation);
+    headerObserver.observe(header, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["title", "aria-label"],
+    });
+  };
+
+  const checkConversation = () => {
     const nextKey = getConversationKey();
     if (nextKey && currentKey && nextKey !== currentKey) {
       currentKey = nextKey;
@@ -39,8 +54,12 @@ function watchConversationSwitches() {
     } else if (nextKey && !currentKey) {
       currentKey = nextKey;
     }
-  });
-  if (document.body) observer.observe(document.body, { childList: true, subtree: true });
+    observeHeader();
+  };
+
+  const bodyObserver = new MutationObserver(checkConversation);
+  if (document.body) bodyObserver.observe(document.body, { childList: true, subtree: true });
+  observeHeader();
 }
 
 function mountDock() {
