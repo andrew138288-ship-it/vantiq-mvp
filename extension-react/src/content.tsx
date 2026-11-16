@@ -24,6 +24,18 @@ function readVisibleChat(limit: number): string {
   return lines.join("\n");
 }
 
+function watchConversationSwitches() {
+  let currentKey = document.querySelector<HTMLElement>('[data-testid="conversation-info-header"]')?.innerText?.trim() || "";
+  const observer = new MutationObserver(() => {
+    const nextKey = document.querySelector<HTMLElement>('[data-testid="conversation-info-header"]')?.innerText?.trim() || "";
+    if (nextKey !== currentKey) {
+      currentKey = nextKey;
+      window.dispatchEvent(new Event("vantiq:conversation-changed"));
+    }
+  });
+  if (document.body) observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+}
+
 function mountDock() {
   if (document.getElementById(HOST_ID)) return;
   const host = document.createElement("div");
@@ -37,6 +49,7 @@ function mountDock() {
   mountPoint.id = "vantiq-react-root";
   shadow.append(style, mountPoint);
   createRoot(mountPoint).render(<App onReadVisibleChat={readVisibleChat} />);
+  watchConversationSwitches();
 }
 
 if (document.readyState === "loading") {
