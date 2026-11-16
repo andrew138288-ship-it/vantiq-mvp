@@ -53,10 +53,11 @@ async def sales_assist(
                 Message.conversation_id == conversation.id,
                 Message.tenant_id == principal["tenant_id"],
             )
-            .order_by(Message.created_at.asc())
-            .limit(40)
+            .order_by(Message.created_at.desc())
+            .limit(20)
         )
     )
+    messages.reverse()
     if not messages:
         raise HTTPException(status_code=422, detail="At least one authorized message is required")
 
