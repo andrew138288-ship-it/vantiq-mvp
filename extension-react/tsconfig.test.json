@@ -5,7 +5,10 @@
     "outDir": ".test-dist",
     "rootDir": "src",
     "declaration": false,
-    "sourceMap": false
+    "sourceMap": false,
+    "allowImportingTsExtensions": false
   },
-  "include": ["src/transcript.ts"]
+  "include": [
+    "src/transcript.ts"
+  ]
 }
