@@ -74,7 +74,6 @@ export default function App({ onReadVisibleChat }: Props) {
   async function loadCustomers(token: string) {
     const result = await apiRequest<Customer[]>("/customers?limit=50", {}, token);
     setCustomers(result);
-    if (!customerId && result[0]) setCustomerId(result[0].id);
   }
 
   useEffect(() => {
@@ -261,6 +260,7 @@ export default function App({ onReadVisibleChat }: Props) {
 
           <section className="section">
             <h2>当前客户</h2>
+            <p className="human-review">为防止把不同 WhatsApp 联系人的消息归到错误客户，请每次切换对话后手动确认对应客户。</p>
             <label htmlFor="vantiq-customer">选择客户</label>
             <select id="vantiq-customer" value={customerId} onChange={(e) => { setCustomerId(e.target.value); setTranscript(""); setAuthorized(false); setDecision(null); }}>
               <option value="">请选择客户</option>
