@@ -205,6 +205,7 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
         user_id=str(user.id),
         tenant_id=str(membership.tenant_id),
         role=membership.role,
+        token_version=user.token_version,
     )
     return TokenResponse(
         access_token=token,
@@ -278,6 +279,7 @@ def confirm_password_reset(
         raise HTTPException(status_code=400, detail="Reset token is invalid or expired")
 
     user.password_hash = hash_password(payload.new_password)
+    user.token_version += 1
     db.execute(
         update(PasswordResetToken)
         .where(PasswordResetToken.user_id == user.id, PasswordResetToken.used_at.is_(None))
