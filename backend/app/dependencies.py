@@ -39,6 +39,8 @@ def get_current_principal(
     user = db.get(User, user_id)
     if user is None or not user.is_active:
         raise unauthorized
+    if claims.get("token_version", 0) != user.token_version:
+        raise unauthorized
     membership = db.scalar(
         select(TenantMembership).where(
             TenantMembership.user_id == user_id,
