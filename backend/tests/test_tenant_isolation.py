@@ -408,6 +408,23 @@ def test_conversation_deletion_removes_messages_and_is_tenant_scoped(isolated_cl
 def test_account_export_contains_current_workspace_data_only_and_no_secrets(isolated_client):
     client, token, ids, session_factory = isolated_client
     headers = {"Authorization": f"Bearer {token}"}
+    conversation = client.post(
+        "/api/v1/conversations",
+        headers=headers,
+        json={"customer_id": ids["customer_a"], "channel": "whatsapp"},
+    )
+    assert conversation.status_code == 201
+    conversation_id = conversation.json()["id"]
+    assert client.post(
+        f"/api/v1/conversations/{conversation_id}/authorize-context",
+        headers=headers,
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers=headers,
+        json={"direction": "inbound", "body": "Export this workspace message"},
+    ).status_code == 201
+
     response = client.get("/api/v1/auth/export", headers=headers)
     assert response.status_code == 200
     assert "attachment" in response.headers.get("content-disposition", "")
@@ -418,8 +435,16 @@ def test_account_export_contains_current_workspace_data_only_and_no_secrets(isol
     assert data["workspace"]["id"] == ids["tenant_a"]
     assert {row["id"] for row in data["customers"]} == {ids["customer_a"]}
     assert all(row["id"] != ids["customer_b"] for row in data["customers"])
-    assert all("Private message from workspace B" != row["body"] for row in data["messages"])
+    assert "Export this workspace message" in {row["body"] for row in data["messages"]}
+    assert "Private message from workspace B" not in {row["body"] for row in data["messages"]}
     assert "password_hash" not in data["account"]
     assert "refresh_token" not in data
     assert "token_hash" not in str(data)
 
+
+
+
+def test_account_export_requires_authentication(isolated_client):
+    client, _, _, _ = isolated_client
+    response = client.get("/api/v1/auth/export")
+    assert response.status_code == 401
