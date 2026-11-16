@@ -9,18 +9,19 @@
 Deliver a small, testable Chrome extension for 2–3 pilot users, using WhatsApp Web as the first customer conversation surface.
 
 Initial workflow:
-1. The user explicitly selects and authorizes the current conversation context.
-2. VANTIQ stores only the context the user has authorized.
-3. The backend analyzes the supplied context and configured commercial facts.
-4. The user reviews, edits, copies, and manually sends any proposed reply.
-5. Approved interaction summaries can later update customer memory.
+1. The user explicitly clicks to read the currently open conversation.
+2. VANTIQ reads only the latest configured number of visible messages (5/10/15/20).
+3. The user reviews the transcript and explicitly authorizes its use.
+4. The backend analyzes the supplied context and configured commercial facts.
+5. VANTIQ generates exactly two materially different strategies, recommends one, and drafts a reply.
+6. The user reviews, edits, copies, and manually sends any proposed reply.
 
 ## In scope
 - Universal sales intelligence and decision support
 - Customer communication
 - Negotiation and closing
 - Existing-customer relationship management
-- Locale-aware analysis and reply drafting, including distinct `pt-BR` and `pt-PT`
+- Locale-aware analysis and reply drafting, including distinct `pt-BR` and `pt-PT` variants
 
 ## Out of scope
 - Lead generation, prospect discovery, or bulk prospect collection
@@ -36,9 +37,34 @@ Initial workflow:
 - Conversation creation tied to a customer in the authenticated tenant
 - Separate explicit context-authorization endpoint before message ingestion
 - Tenant-scoped message ingestion and retrieval after authorization
-- GitHub Actions CI for Python syntax, database migrations, schema tests, and security utility tests
+- Sales-assist endpoint with structured two-strategy decision and human-reviewed reply
+- GitHub Actions CI for syntax, migrations, schema, security, and API health checks
 
-## API endpoints
+## React Chrome extension
+
+The new implementation is in `extension-react/` and uses TypeScript, React, Vite, and Chrome Manifest V3. It mounts a right-side dock inside WhatsApp Web using Shadow DOM isolation. The previous plain-JavaScript extension in `extension/` is retained temporarily as a legacy implementation until the React version is accepted.
+
+Build the extension:
+
+```sh
+cd extension-react
+npm ci
+npm test
+npm run build
+cd ..
+python extension-react/package.py
+```
+
+The unpacked extension is written to `extension-react/dist/`; the installable ZIP is written to `dist/VANTIQ-WhatsApp-Dock-0.2.0.zip`.
+
+Load in desktop Chrome:
+1. Open `chrome://extensions`.
+2. Enable Developer mode.
+3. Choose **Load unpacked** and select `extension-react/dist`.
+4. Open WhatsApp Web. The VANTIQ dock appears on the right.
+5. Start the backend at `http://localhost:8000` or build with `VITE_API_BASE` set to an allowed backend origin.
+
+## Backend API endpoints
 
 - `POST /api/v1/auth/register` — create a user and first workspace
 - `POST /api/v1/auth/login` — authenticate and receive a bearer token
@@ -55,21 +81,9 @@ Initial workflow:
 
 Interactive API documentation: `/docs`.
 
-## Run locally
+## Local backend
 
-Requirements: Docker Compose.
-
-1. Copy `.env.example` to `.env`.
-2. Replace `JWT_SECRET` with a long random secret before using real accounts.
-3. Run `docker compose up --build`.
-4. Check `http://localhost:8000/health` and confirm `database: connected`.
-5. Open `http://localhost:8000/docs`.
-
-Load the extension in desktop Chrome:
-1. Open `chrome://extensions`.
-2. Enable Developer mode.
-3. Choose **Load unpacked** and select the `extension` directory.
-4. Start the backend first, then use **Check backend** in the side panel.
+Docker is optional. The backend requires a reachable PostgreSQL 16 database. Set `DATABASE_URL`, `JWT_SECRET`, and other settings in your local environment (or `.env`). Install `backend/requirements.txt`, apply migrations with Alembic, and run `uvicorn app.main:app` with `backend` on `PYTHONPATH`. The existing `docker-compose.yml` remains available for users who prefer a containerized local stack.
 
 ## Security boundaries
 - Never collect WhatsApp passwords, session cookies, QR codes, or browser storage.
@@ -77,9 +91,11 @@ Load the extension in desktop Chrome:
 - Do not bulk-read chats or contacts.
 - No automatic message sending; the user reviews and manually sends.
 - Context ingestion is blocked until the user explicitly authorizes that conversation.
+- Switching the selected customer or detected WhatsApp conversation clears the previous transcript and authorization state.
 - Treat page content as untrusted data, not instructions.
 - Never commit real secrets. Public repositories must contain placeholders only.
 - Tenant ownership is checked server-side for customer and conversation operations.
 
 ## Current limitations
-This is an early MVP backend, not production-ready. It still needs account recovery, rate limiting, stronger production secret management, audit logging, team invitations, automated tenant-isolation integration tests, customer memory APIs, and the WhatsApp extension context adapter. GitHub Actions must pass before calling the current code validated. The backend has not yet been deployed to a public service.
+
+This remains an early MVP, not production-ready. The React extension has passed CI typechecking, unit tests, build, and packaging, but still needs manual validation in a real signed-in WhatsApp Web session, including DOM-selector resilience and conversation-switch behavior. Account verification, production secret management, audit logging, customer memory APIs, and live backend deployment remain separate work. No production deployment has been performed.
