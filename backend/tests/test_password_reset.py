@@ -88,6 +88,11 @@ def test_password_reset_changes_password_and_token_is_single_use(reset_client, m
         headers={"Authorization": f"Bearer {old_session.json()['access_token']}"},
     )
     assert revoked_session.status_code == 401
+    revoked_refresh = client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": old_session.json()["refresh_token"]},
+    )
+    assert revoked_refresh.status_code == 401
 
     reused = client.post(
         "/api/v1/auth/password-reset/confirm",
