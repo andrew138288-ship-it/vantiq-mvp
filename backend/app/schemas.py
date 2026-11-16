@@ -58,8 +58,27 @@ class UserPublic(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     user: UserPublic
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(min_length=32, max_length=256)
+
+
+class RefreshResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
+class SessionPublic(BaseModel):
+    session_id: uuid.UUID
+    created_at: datetime
+    last_used_at: datetime | None
+    expires_at: datetime
+    device: str
 
 
 class CustomerCreate(BaseModel):
