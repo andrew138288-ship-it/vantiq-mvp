@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://vantiq:vantiq_local_only@localhost:5432/vantiq"
     jwt_secret: str = _DEFAULT_JWT_SECRET
     access_token_minutes: int = 60
+    ai_provider: str = "mock"
     openai_api_key: str | None = None
     openai_model: str = "gpt-6-astra"
     smtp_host: str | None = None
@@ -32,13 +33,21 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @model_validator(mode="after")
-    def require_production_jwt_secret(self):
-        if self.app_env.strip().lower() in {"production", "prod"}:
+    def validate_runtime_secrets_and_provider(self):
+        environment = self.app_env.strip().lower()
+        provider = self.ai_provider.strip().lower()
+        if provider not in {"mock", "openai"}:
+            raise ValueError("AI_PROVIDER must be either 'mock' or 'openai'")
+        if environment in {"production", "prod"}:
             if self.jwt_secret == _DEFAULT_JWT_SECRET or len(self.jwt_secret) < 32:
                 raise ValueError(
                     "Production requires JWT_SECRET to be explicitly configured "
                     "with at least 32 characters"
                 )
+            if provider == "mock":
+                raise ValueError("Production must use a real AI provider, not AI_PROVIDER=mock")
+            if provider == "openai" and not self.openai_api_key:
+                raise ValueError("Production AI_PROVIDER=openai requires OPENAI_API_KEY")
         return self
 
 
