@@ -2,8 +2,8 @@ import { useEffect, useState, type FormEvent } from "react";
 import { parseTranscript } from "./transcript";
 
 type Customer = { id: string; display_name: string };
-type Session = { accessToken: string; user: { display_name?: string | null; email: string; role: string } };
-type LoginResponse = { access_token: string; token_type: string; user: Session["user"] };
+type Session = { accessToken: string; refreshToken: string; user: { display_name?: string | null; email: string; role: string } };
+type LoginResponse = { access_token: string; refresh_token: string; token_type: string; user: Session["user"] };
 type Strategy = { name: string; objective: string; rationale: string; next_move: string; risk: string };
 type Decision = {
   customer_situation: string;
@@ -19,7 +19,7 @@ type Decision = {
   before_sending: string[];
 };
 type SalesAssistResponse = { decision: Decision; requires_human_review: boolean };
-type ApiReply = { ok: boolean; data?: unknown; error?: string };
+type ApiReply = { ok: boolean; data?: unknown; error?: string; status?: number };
 type Props = { onReadVisibleChat: (limit: number) => string };
 
 async function apiRequest<T>(
@@ -27,13 +27,37 @@ async function apiRequest<T>(
   options: { method?: string; body?: unknown } = {},
   token?: string,
 ): Promise<T> {
-  const result = await chrome.runtime.sendMessage({
-    type: "VANTIQ_API_REQUEST",
-    path,
-    method: options.method ?? "GET",
-    body: options.body,
-    token,
-  }) as ApiReply;
+  const send = (requestPath: string, requestToken?: string, requestBody?: unknown) =>
+    chrome.runtime.sendMessage({
+      type: "VANTIQ_API_REQUEST",
+      path: requestPath,
+      method: options.method ?? "GET",
+      body: requestBody,
+      token: requestToken,
+    }) as Promise<ApiReply>;
+  let result = await send(path, token, options.body);
+  if (!result?.ok && result.status === 401 && token && path !== "/auth/refresh") {
+    const stored = await chrome.storage.session.get("vantiqSession");
+    const saved = stored.vantiqSession as Session | undefined;
+    if (saved?.refreshToken) {
+      const renewed = await chrome.runtime.sendMessage({
+        type: "VANTIQ_API_REQUEST",
+        path: "/auth/refresh",
+        method: "POST",
+        body: { refresh_token: saved.refreshToken },
+      }) as ApiReply;
+      if (renewed?.ok && renewed.data && typeof renewed.data === "object") {
+        const tokens = renewed.data as { access_token: string; refresh_token: string };
+        const updated = { ...saved, accessToken: tokens.access_token, refreshToken: tokens.refresh_token };
+        await chrome.storage.session.set({ vantiqSession: updated });
+        window.dispatchEvent(new CustomEvent("vantiq:session-refreshed", { detail: updated }));
+        result = await send(path, updated.accessToken, options.body);
+      } else {
+        await chrome.storage.session.remove("vantiqSession");
+        window.dispatchEvent(new Event("vantiq:session-expired"));
+      }
+    }
+  }
   if (!result?.ok) throw new Error(result?.error || "无法连接 VANTIQ 后端");
   return result.data as T;
 }
@@ -76,6 +100,7 @@ export default function App({ onReadVisibleChat }: Props) {
   const [analysisStatus, setAnalysisStatus] = useState("");
   const [decision, setDecision] = useState<Decision | null>(null);
   const [busy, setBusy] = useState(false);
+  const [activeSessions, setActiveSessions] = useState<Array<{session_id:string;created_at:string;last_used_at:string|null;expires_at:string;device:string}>>([]);
 
   async function loadCustomers(token: string) {
     const result = await apiRequest<Customer[]>("/customers?limit=50", {}, token);
@@ -90,8 +115,12 @@ export default function App({ onReadVisibleChat }: Props) {
       setCustomerId("");
       setAnalysisStatus("检测到 WhatsApp 客户对话切换。旧对话已清空，请重新选择对应的 VANTIQ 客户。");
     };
+    const handleSessionRefreshed = (event: Event) => setSession((event as CustomEvent<Session>).detail);
+    const handleSessionExpired = () => { setSession(null); setCustomers([]); setAuthStatus("登录已过期，请重新登录。"); };
     window.addEventListener("vantiq:conversation-changed", handleConversationChange);
-    return () => window.removeEventListener("vantiq:conversation-changed", handleConversationChange);
+    window.addEventListener("vantiq:session-refreshed", handleSessionRefreshed);
+    window.addEventListener("vantiq:session-expired", handleSessionExpired);
+    return () => { window.removeEventListener("vantiq:conversation-changed", handleConversationChange); window.removeEventListener("vantiq:session-refreshed", handleSessionRefreshed); window.removeEventListener("vantiq:session-expired", handleSessionExpired); };
   }, []);
 
   useEffect(() => {
@@ -221,7 +250,7 @@ export default function App({ onReadVisibleChat }: Props) {
         method: "POST",
         body: { email: email.trim(), password },
       });
-      const restored: Session = { accessToken: result.access_token, user: result.user };
+      const restored: Session = { accessToken: result.access_token, refreshToken: result.refresh_token, user: result.user };
       await chrome.storage.session.set({ vantiqSession: restored });
       setSession(restored);
       setPassword("");
@@ -322,6 +351,9 @@ export default function App({ onReadVisibleChat }: Props) {
   }
 
   async function signOut() {
+    if (session?.refreshToken) {
+      try { await apiRequest("/auth/logout", { method: "POST", body: { refresh_token: session.refreshToken } }); } catch { /* local logout must still complete */ }
+    }
     await chrome.storage.session.remove("vantiqSession");
     setSession(null);
     setCustomers([]);
