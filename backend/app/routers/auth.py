@@ -6,13 +6,15 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..dependencies import get_db, get_current_principal
 from ..models import (
-    Tenant, User, TenantMembership, PasswordResetToken, EmailVerificationToken, RefreshSession,
+    Tenant, User, TenantMembership, Customer, Conversation, Message, CustomerMemory,
+    PasswordResetToken, EmailVerificationToken, RefreshSession,
 )
 from ..rate_limit import limiter
 from ..schemas import (
@@ -428,3 +430,106 @@ def me(principal: dict = Depends(get_current_principal)):
         display_name=principal["display_name"], tenant_id=principal["tenant_id"],
         role=principal["role"]
     )
+
+@router.get("/export")
+def export_account_data(principal: dict = Depends(get_current_principal), db: Session = Depends(get_db)):
+    """Export the signed-in user's profile and records in the currently selected workspace."""
+    user = db.get(User, principal["user_id"])
+    tenant = db.get(Tenant, principal["tenant_id"])
+    if user is None or tenant is None:
+        raise HTTPException(status_code=404, detail="Account workspace not found")
+
+    customers = list(db.scalars(
+        select(Customer)
+        .where(Customer.tenant_id == principal["tenant_id"])
+        .order_by(Customer.created_at.asc())
+    ).all())
+    conversations = list(db.scalars(
+        select(Conversation)
+        .where(Conversation.tenant_id == principal["tenant_id"])
+        .order_by(Conversation.created_at.asc())
+    ).all())
+    memories = list(db.scalars(
+        select(CustomerMemory)
+        .where(CustomerMemory.tenant_id == principal["tenant_id"])
+        .order_by(CustomerMemory.updated_at.asc())
+    ).all())
+    messages = list(db.scalars(
+        select(Message)
+        .where(Message.tenant_id == principal["tenant_id"])
+        .order_by(Message.created_at.asc())
+    ).all())
+    sessions = list(db.scalars(
+        select(RefreshSession)
+        .where(RefreshSession.user_id == principal["user_id"])
+        .order_by(RefreshSession.created_at.asc())
+    ).all())
+
+    payload = {
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "scope": "account_profile_and_currently_selected_workspace",
+        "account": {
+            "id": str(user.id),
+            "email": user.email,
+            "display_name": user.display_name,
+            "email_verified": user.is_email_verified,
+            "account_status": user.account_status,
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+        },
+        "workspace": {
+            "id": str(tenant.id),
+            "name": tenant.name,
+            "role": principal["role"],
+        },
+        "customers": [{
+            "id": str(row.id),
+            "display_name": row.display_name,
+            "external_ref": row.external_ref,
+            "preferred_locale": row.preferred_locale,
+            "notes": row.notes,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        } for row in customers],
+        "conversations": [{
+            "id": str(row.id),
+            "customer_id": str(row.customer_id),
+            "channel": row.channel,
+            "context_version": row.context_version,
+            "context_authorized_at": row.context_authorized_at.isoformat() if row.context_authorized_at else None,
+            "is_active": row.is_active,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        } for row in conversations],
+        "messages": [{
+            "id": str(row.id),
+            "conversation_id": str(row.conversation_id),
+            "direction": row.direction,
+            "body": row.body,
+            "source": row.source,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        } for row in messages],
+        "customer_memories": [{
+            "id": str(row.id),
+            "customer_id": str(row.customer_id),
+            "summary": row.summary,
+            "version": row.version,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        } for row in memories],
+        "sessions": [{
+            "session_id": str(row.session_id),
+            "user_agent": row.user_agent,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "last_used_at": row.last_used_at.isoformat() if row.last_used_at else None,
+            "expires_at": row.expires_at.isoformat() if row.expires_at else None,
+            "revoked_at": row.revoked_at.isoformat() if row.revoked_at else None,
+        } for row in sessions],
+        "exclusions": [
+            "password_hashes and raw authentication tokens",
+            "records belonging to other workspaces",
+            "database backups, infrastructure logs, and third-party provider copies",
+        ],
+    }
+    return JSONResponse(
+        content=payload,
+        headers={"Content-Disposition": 'attachment; filename="vantiq-data-export.json"'},
+    )
+
