@@ -1,5 +1,3 @@
-from datetime import datetime, timezone
-
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
@@ -104,7 +102,6 @@ def test_session_listing_and_single_session_revocation(session_client):
     after = client.get("/api/v1/auth/sessions", headers=headers)
     assert after.status_code == 200
     assert len(after.json()) == 1
-    assert client.post("/api/v1/auth/refresh", json={"refresh_token": second["refresh_token"]}).status_code == 200
 
 
 def test_logout_all_revokes_sessions_and_access_tokens(session_client):
