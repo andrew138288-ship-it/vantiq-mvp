@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 from ..dependencies import get_db, get_current_principal
 from ..models import Customer, Conversation, Message
@@ -125,3 +125,21 @@ def list_messages(
         .limit(limit)
     )
     return list(db.scalars(statement))
+
+
+@router.delete("/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_conversation(
+    conversation_id: uuid.UUID,
+    principal: dict = Depends(get_current_principal),
+    db: Session = Depends(get_db),
+):
+    conversation = _get_conversation(db, conversation_id, principal["tenant_id"])
+    db.execute(
+        delete(Message).where(
+            Message.conversation_id == conversation.id,
+            Message.tenant_id == principal["tenant_id"],
+        )
+    )
+    db.delete(conversation)
+    db.commit()
+    return None
