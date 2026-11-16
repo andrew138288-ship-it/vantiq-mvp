@@ -167,9 +167,10 @@ export default function App({ onReadVisibleChat }: Props) {
         const restored = { ...saved, user };
         setSession(restored);
         await loadCustomers(saved.accessToken);
-        await loadSessions(saved.accessToken);
         const latest = await chrome.storage.session.get("vantiqSession");
-        if (latest.vantiqSession) setSession(latest.vantiqSession as Session);
+        const active = (latest.vantiqSession as Session | undefined) || restored;
+        setSession(active);
+        await loadSessions(active.accessToken);
       } catch {
         await chrome.storage.session.remove("vantiqSession");
         setAuthStatus("登录状态已失效，请重新登录。");
