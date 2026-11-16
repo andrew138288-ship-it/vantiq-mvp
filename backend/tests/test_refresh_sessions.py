@@ -180,9 +180,12 @@ def test_user_cannot_list_or_revoke_another_users_session(session_client):
     assert owner_sessions.status_code == 200
     assert other_sessions.status_code == 200
     assert len(owner_sessions.json()) == 1
-    assert other_sessions.json() == []
+    assert len(other_sessions.json()) == 1
+    owner_session_id = owner_sessions.json()[0]["session_id"]
+    other_session_id = other_sessions.json()[0]["session_id"]
+    assert owner_session_id != other_session_id
 
-    foreign_session_id = owner_sessions.json()[0]["session_id"]
+    foreign_session_id = owner_session_id
     denied = client.delete(
         f"/api/v1/auth/sessions/{foreign_session_id}",
         headers=other_headers,
