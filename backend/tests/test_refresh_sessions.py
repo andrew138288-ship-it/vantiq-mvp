@@ -24,9 +24,14 @@ def session_client():
     db = TestingSession()
     tenant = Tenant(name="Session Workspace", slug="session-workspace")
     user = User(email="sessions@example.com", display_name="Session User", password_hash=hash_password(PASSWORD))
-    db.add_all([tenant, user])
+    other_tenant = Tenant(name="Other Workspace", slug="other-workspace")
+    other_user = User(email="other-sessions@example.com", display_name="Other User", password_hash=hash_password(PASSWORD))
+    db.add_all([tenant, user, other_tenant, other_user])
     db.flush()
-    db.add(TenantMembership(tenant_id=tenant.id, user_id=user.id, role="owner"))
+    db.add_all([
+        TenantMembership(tenant_id=tenant.id, user_id=user.id, role="owner"),
+        TenantMembership(tenant_id=other_tenant.id, user_id=other_user.id, role="owner"),
+    ])
     db.commit()
     db.close()
 
@@ -156,3 +161,34 @@ def test_logout_is_idempotent_and_revokes_refresh_token(session_client):
         assert row.revoked_at is not None
     finally:
         db.close()
+
+
+
+def test_user_cannot_list_or_revoke_another_users_session(session_client):
+    client, _ = session_client
+    owner = login(client)
+    other = client.post("/api/v1/auth/login", json={
+        "email": "other-sessions@example.com",
+        "password": PASSWORD,
+    }).json()
+
+    owner_headers = {"Authorization": f"Bearer {owner['access_token']}"}
+    other_headers = {"Authorization": f"Bearer {other['access_token']}"}
+    owner_sessions = client.get("/api/v1/auth/sessions", headers=owner_headers)
+    other_sessions = client.get("/api/v1/auth/sessions", headers=other_headers)
+
+    assert owner_sessions.status_code == 200
+    assert other_sessions.status_code == 200
+    assert len(owner_sessions.json()) == 1
+    assert other_sessions.json() == []
+
+    foreign_session_id = owner_sessions.json()[0]["session_id"]
+    denied = client.delete(
+        f"/api/v1/auth/sessions/{foreign_session_id}",
+        headers=other_headers,
+    )
+    assert denied.status_code == 404
+    assert client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": owner["refresh_token"]},
+    ).status_code == 200
