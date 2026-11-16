@@ -123,6 +123,7 @@ export default function App({ onReadVisibleChat }: Props) {
   const [decision, setDecision] = useState<Decision | null>(null);
   const [busy, setBusy] = useState(false);
   const [activeSessions, setActiveSessions] = useState<Array<{session_id:string;created_at:string;last_used_at:string|null;expires_at:string;device:string}>>([]);
+  const [exportStatus, setExportStatus] = useState("");
 
   async function loadCustomers(token: string) {
     const result = await apiRequest<Customer[]>("/customers?limit=50", {}, token);
@@ -132,6 +133,24 @@ export default function App({ onReadVisibleChat }: Props) {
   async function loadSessions(token: string) {
     const result = await apiRequest<Array<{session_id:string;created_at:string;last_used_at:string|null;expires_at:string;device:string}>>("/auth/sessions", {}, token);
     setActiveSessions(result);
+  }
+
+  async function exportWorkspaceData() {
+    if (!session) return;
+    setExportStatus("正在准备数据导出…");
+    try {
+      const data = await apiRequest<Record<string, unknown>>("/auth/export", {}, session.accessToken);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "vantiq-data-export.json";
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setExportStatus("导出已生成。文件仅包含当前工作区数据，不包含备份或第三方服务副本。");
+    } catch (error) {
+      setExportStatus(error instanceof Error ? error.message : "数据导出失败，请稍后重试。");
+    }
   }
 
   async function revokeOneSession(sessionId: string) {
@@ -528,6 +547,13 @@ export default function App({ onReadVisibleChat }: Props) {
               </div>
             ))}
             <button className="secondary full" onClick={() => void revokeAllSessions()}>退出所有设备</button>
+          </section>
+
+          <section className="section">
+            <h2>账户数据</h2>
+            <p className="human-review">导出账户资料及当前选中的工作区中的客户、对话、消息和客户记忆。其他工作区、备份和第三方服务副本不包含在此文件中。</p>
+            <button className="secondary full" onClick={() => void exportWorkspaceData()}>导出当前工作区数据（JSON）</button>
+            {exportStatus && <p className="status" role="status">{exportStatus}</p>}
           </section>
 
           <section className="section">
