@@ -8,6 +8,12 @@ type ApiRequest = {
 
 const API_BASE = __VANTIQ_API_BASE__;
 
+// The dock UI runs as a content script. Explicitly grant it access to the
+// extension-scoped session store so the bearer token never enters page storage.
+void chrome.storage.session.setAccessLevel({
+  accessLevel: "TRUSTED_AND_UNTRUSTED_CONTEXTS",
+});
+
 chrome.runtime.onMessage.addListener((message: ApiRequest, sender, sendResponse) => {
   if (message?.type !== "VANTIQ_API_REQUEST") return false;
 
