@@ -11,6 +11,10 @@ const authStatus = document.querySelector("#auth-status");
 const accountName = document.querySelector("#account-name");
 const customerList = document.querySelector("#customer-list");
 const customerSelect = document.querySelector("#customer-select");
+const customerMemory = document.querySelector("#customer-memory");
+const customerMemoryStatus = document.querySelector("#customer-memory-status");
+const customerMemorySummary = document.querySelector("#customer-memory-summary");
+const customerMemoryVersion = document.querySelector("#customer-memory-version");
 const analyzeButton = document.querySelector("#analyze");
 const importChatButton = document.querySelector("#import-visible-chat");
 const analysisStatus = document.querySelector("#analysis-status");
@@ -133,6 +137,32 @@ loginForm.addEventListener("submit", async (event) => {
   } finally {
     loginButton.disabled = false;
   }
+});
+
+async function loadCustomerMemory(customerId, token) {
+  customerMemory.hidden = !customerId;
+  customerMemorySummary.textContent = "";
+  customerMemoryVersion.textContent = "";
+  if (!customerId) return;
+  customerMemoryStatus.textContent = "Loading saved sales memory…";
+  try {
+    const memory = await apiRequest(`/customers/${encodeURIComponent(customerId)}/memory`, {}, token);
+    customerMemoryStatus.textContent = "Saved sales summary";
+    customerMemorySummary.textContent = memory.summary;
+    customerMemoryVersion.textContent = `Version ${memory.version} · Updated ${new Date(memory.updated_at).toLocaleString()}`;
+  } catch (error) {
+    if (error.status === 404) {
+      customerMemoryStatus.textContent = "No saved sales summary yet. It will appear here after the automatic memory workflow is connected.";
+    } else {
+      customerMemoryStatus.textContent = `Could not load customer memory: ${error.message}`;
+    }
+  }
+}
+
+customerSelect.addEventListener("change", async () => {
+  const session = await readSession();
+  if (!session) return;
+  await loadCustomerMemory(customerSelect.value, session.accessToken);
 });
 
 document.querySelector("#refresh-customers").addEventListener("click", async () => {
