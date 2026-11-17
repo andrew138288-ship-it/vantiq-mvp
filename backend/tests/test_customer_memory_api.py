@@ -55,6 +55,15 @@ def test_customer_memory_requires_version_and_is_idempotent(isolated_client):
     )
     assert stale.status_code == 409
 
+    current = client.get(f"/api/v1/customers/{customer_id}/memory", headers=headers)
+    history = client.get(f"/api/v1/customers/{customer_id}/memory/revisions", headers=headers)
+    assert current.status_code == 200
+    assert current.json()["summary"] == payload["summary"]
+    assert history.status_code == 200
+    assert len(history.json()) == 1
+    assert history.json()[0]["version"] == 1
+    assert history.json()[0]["provenance"] == payload["provenance"]
+
     db = session_factory()
     try:
         assert db.query(CustomerMemory).filter_by(customer_id=uuid.UUID(customer_id)).count() == 1
