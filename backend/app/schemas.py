@@ -199,3 +199,16 @@ class CustomerMemoryPublic(BaseModel):
     structured_data: dict
     version: int
     updated_at: datetime
+
+
+class CustomerMemoryRevisionPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    customer_id: uuid.UUID
+    version: int
+    summary: str
+    structured_data: dict
+    provenance: list[dict]
+    source_conversation_id: uuid.UUID | None
+    context_version: int | None
+    created_at: datetime
