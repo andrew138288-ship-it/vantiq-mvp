@@ -51,6 +51,12 @@
         <h2>Sales intelligence</h2>
         <label for="customer-select">Customer</label>
         <select id="customer-select"><option value="">Select a customer</option></select>
+        <section id="customer-memory" aria-live="polite" hidden>
+          <h3>Customer sales memory</h3>
+          <p id="customer-memory-status">No saved sales summary yet.</p>
+          <p id="customer-memory-summary"></p>
+          <p id="customer-memory-version" class="muted"></p>
+        </section>
         <button id="import-visible-chat" type="button" class="secondary">Import currently open WhatsApp chat</button>
         <label for="transcript">Conversation context (review before analysis)</label>
         <textarea id="transcript" rows="7" maxlength="12000" placeholder="Paste only the customer conversation you are authorized to share. Include speaker labels where possible."></textarea>
