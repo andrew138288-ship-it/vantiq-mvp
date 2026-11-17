@@ -10,7 +10,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return false;
   }
 
-  const messageNodes = [...panel.querySelectorAll("[data-pre-plain-text]")].slice(-40);
+  const messageNodes = [...panel.querySelectorAll("[data-pre-plain-text]")].slice(-5);
   const lines = [];
   for (const node of messageNodes) {
     const text = [...node.querySelectorAll(".selectable-text")]
@@ -23,7 +23,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (!lines.length) {
-    sendResponse({ ok: false, error: "No readable text messages found in the currently loaded conversation." });
+    sendResponse({ ok: false, error: "No readable text messages found in the currently open conversation (latest 5 visible messages)." });
     return false;
   }
   sendResponse({ ok: true, transcript: lines.join("\n"), count: lines.length });
