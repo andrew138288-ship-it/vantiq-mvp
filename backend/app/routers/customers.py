@@ -9,6 +9,7 @@ from ..models import Customer, CustomerIdentity, CustomerMemory, CustomerMemoryR
 from ..schemas import (
     CustomerCreate, CustomerUpdate, CustomerPublic, CustomerResolveRequest,
     CustomerResolveResponse, CustomerMemoryUpdateRequest, CustomerMemoryPublic,
+    CustomerMemoryRevisionPublic,
 )
 
 router = APIRouter(prefix="/customers", tags=["customers"])
