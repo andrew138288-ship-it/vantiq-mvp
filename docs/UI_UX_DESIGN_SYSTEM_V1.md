@@ -92,7 +92,65 @@ The current React implementation in the parent branch has several known mismatch
 
 These are recorded as implementation work, not claimed as fixed by this document.
 
-## 8. Acceptance checklist
+
+## 8. Order capture and quote workspace (approved product requirement)
+
+### User-approved configuration
+- Price resolution combines a maintained product price list, customer-specific prices, and clearly attributed historical prices found in prior conversation context.
+- Quote persistence is manual: AI may prepare and populate a draft, but only the user can explicitly save it as a quote record.
+
+### Primary flow
+1. Detect a customer-stated order/request in the active, authorized conversation context. Capture product, quantity, unit, currency, requested date and relevant conditions only when explicitly supported.
+2. Keep the detected request as a **customer order intent**, not a confirmed order or completed sale.
+3. Resolve the product and applicable price in this order: customer-specific price rule; matching product price-list rule; historical price explicitly stated/confirmed in prior conversation context. Historical conversation prices are evidence to review, not an unconditional current price override.
+4. Price resolution must retain source, effective date/validity, currency, quantity tier, customer scope and confidence. If sources conflict, are expired, ambiguous, or missing, show “待確認價格”; never invent or silently choose a value.
+5. Calculate line totals and quote totals only from confirmed quantities and resolved/explicitly approved unit prices. Keep tax, shipping, discounts, payment terms and validity as separate explicit fields; do not assume them.
+6. Present an editable quote draft with a clear source trace for every resolved price. User reviews and edits it.
+7. Only the explicit **手動保存報價單** action creates a persisted quote record. Show saved/failed state only after the backend confirms it.
+
+### Quote status and transaction boundary
+- Customer order intent → quote draft → manually saved quote.
+- A saved quote is not an accepted order, paid invoice, shipment, revenue, or completed transaction.
+- Never auto-send a quote or WhatsApp message. Sending/sharing remains a separate user action and is outside this manual-save requirement.
+- Do not infer order acceptance from customer enthusiasm, an indicated quantity, or a request for a quote.
+- Do not treat an old chat price as a current valid price without an applicable date/rule or user confirmation.
+
+### Quote fields and provenance
+- Customer identity (verified channel identity or explicitly confirmed customer).
+- Product/SKU and description; quantity and unit; unit price and currency; line total.
+- Price source: product price list, customer-specific price, or historical conversation reference; include source reference and effective/observed date.
+- Explicitly entered terms: discount, tax, shipping, payment terms, delivery terms, quote validity and notes.
+- Quote number, creation time, creator, status, revision history and saved state.
+- Missing or conflicting fields remain visibly unresolved; do not fill them with defaults that imply commercial agreement.
+
+### Required UI states
+- No order intent detected.
+- Order intent detected; product or quantity needs confirmation.
+- Product resolved; price matching in progress.
+- Price matched with source and validity details.
+- Price missing, expired, ambiguous or conflicting; manual review required.
+- Editable draft; unsaved changes.
+- Saving / saved / save failed (server-confirmed only).
+- Conversation/customer changed; unsaved draft is isolated and must not carry over to another customer.
+
+### Implementation boundary
+The current MVP has no verified product-price catalog, customer price-rule resolver, historical-price resolver, or quote persistence API connected to the React dock. The first UI pass must therefore label these as pending integration and must not display sample prices as real data or claim a quote was saved. Implement the data contract and backend endpoints before enabling persistence.
+
+## 9. Acceptance checklist additions
+
+- [ ] Order quantity/product extraction is grounded in authorized visible conversation context and is editable for human correction.
+- [ ] Order intent is not represented as an accepted/confirmed order.
+- [ ] Price resolver supports product price lists, customer-specific prices and attributed historical conversation prices.
+- [ ] Every matched price exposes source, currency, scope, validity/effective date and quantity tier where applicable.
+- [ ] Missing/conflicting/expired prices require human confirmation; no AI-invented price.
+- [ ] Totals calculate only from confirmed quantities and resolved/approved prices.
+- [ ] Quote terms are explicit; no assumed discount, tax, shipping, payment or delivery commitment.
+- [ ] Quote draft is editable and isolated to the correct customer.
+- [ ] Only an explicit user action saves a quote; saved state follows server confirmation.
+- [ ] Saved quote is not mislabeled as accepted order, payment, shipment or revenue.
+- [ ] No quote or WhatsApp message is automatically sent.
+
+## 10. Acceptance checklist
 
 - [ ] Exactly five latest visibly rendered messages are the only WhatsApp context used.
 - [ ] No manual “Add customer” workflow in normal product UI.
