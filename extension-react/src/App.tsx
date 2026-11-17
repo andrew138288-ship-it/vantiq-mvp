@@ -123,6 +123,8 @@ export default function App({ onReadVisibleChat }: Props) {
   const [busy, setBusy] = useState(false);
   const [activeSessions, setActiveSessions] = useState<Array<{session_id:string;created_at:string;last_used_at:string|null;expires_at:string;device:string}>>([]);
   const [exportStatus, setExportStatus] = useState("");
+  const [quoteProduct, setQuoteProduct] = useState("");
+  const [quoteQuantity, setQuoteQuantity] = useState("");
 
   async function loadCustomers(token: string) {
     const result = await apiRequest<Customer[]>("/customers?limit=50", {}, token);
@@ -187,7 +189,9 @@ export default function App({ onReadVisibleChat }: Props) {
       setAuthorized(false);
       setDecision(null);
       setCustomerId("");
-      setAnalysisStatus("检测到 WhatsApp 客户对话切换。旧对话已清空，请重新选择对应的 VANTIQ 客户。");
+      setQuoteProduct("");
+      setQuoteQuantity("");
+      setAnalysisStatus("检测到 WhatsApp 客户对话切换。旧对话和未保存报价草稿已清空，请重新确认客户。");
     };
     const handleSessionRefreshed = (event: Event) => setSession((event as CustomEvent<Session>).detail);
     const handleSessionExpired = () => { setSession(null); setCustomers([]); setAuthStatus("登录已过期，请重新登录。"); };
@@ -559,7 +563,7 @@ export default function App({ onReadVisibleChat }: Props) {
             <h2>当前客户</h2>
             <p className="human-review">为防止把不同 WhatsApp 联系人的消息归到错误客户，请每次切换对话后手动确认对应客户。</p>
             <label htmlFor="vantiq-customer">选择客户</label>
-            <select id="vantiq-customer" value={customerId} onChange={(e) => { setCustomerId(e.target.value); setTranscript(""); setAuthorized(false); setDecision(null); }}>
+            <select id="vantiq-customer" value={customerId} onChange={(e) => { setCustomerId(e.target.value); setTranscript(""); setAuthorized(false); setDecision(null); setQuoteProduct(""); setQuoteQuantity(""); }}>
               <option value="">请选择并确认对应客户</option>
               {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.display_name}</option>)}
             </select>
@@ -567,6 +571,26 @@ export default function App({ onReadVisibleChat }: Props) {
               <input aria-label="新客户名称" placeholder="添加客户名称" value={newCustomer} onChange={(e) => setNewCustomer(e.target.value)} />
               <button className="secondary" onClick={addCustomer} disabled={busy || !newCustomer.trim()}>添加</button>
             </div>
+          </section>
+
+          <section className="section quote-workspace">
+            <div className="account-row">
+              <h2>订单与报价</h2>
+              <span className="coming-soon">价格引擎接入中</span>
+            </div>
+            <p className="human-review">识别客户提出的产品和数量后，可在此核对报价草稿。当前仅为 UI 工作区预览，尚未连接价格目录或报价保存接口。</p>
+            <label htmlFor="vantiq-quote-product">产品 / SKU</label>
+            <input id="vantiq-quote-product" value={quoteProduct} onChange={(e) => setQuoteProduct(e.target.value)} placeholder="等待从客户需求中识别，或手动核对" maxLength={200} />
+            <label htmlFor="vantiq-quote-quantity">客户提出的数量</label>
+            <input id="vantiq-quote-quantity" inputMode="decimal" value={quoteQuantity} onChange={(e) => setQuoteQuantity(e.target.value)} placeholder="等待识别数量" maxLength={40} />
+            <div className="price-match-pending">
+              <b>售價匹配</b>
+              <strong>待確認價格</strong>
+              <p>后续自动匹配产品价格表、客户专属价格，并参考有明确来源和日期的历史对话价格。价格冲突、过期或缺失时必须由你确认。</p>
+            </div>
+            <div className="quote-total-row"><span>报价金额</span><b>待价格确认</b></div>
+            <button className="primary full" disabled title="报价保存 API 尚未接入">手动保存报价单（接口开发中）</button>
+            <p className="human-review">保存功能尚未开放；此处不会把草稿误报为已保存报价。客户提出数量也不代表订单已确认。</p>
           </section>
 
           <section className="section">
