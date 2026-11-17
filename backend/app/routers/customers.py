@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -32,7 +33,7 @@ def resolve_customer(
         ))
         if customer is None:
             raise HTTPException(status_code=409, detail="Customer identity is inconsistent")
-        identity.last_seen_at = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+        identity.last_seen_at = datetime.now(timezone.utc)
         if payload.display_name != "WhatsApp customer":
             customer.display_name = payload.display_name
         if payload.preferred_locale:
