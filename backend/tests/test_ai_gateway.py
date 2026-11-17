@@ -95,3 +95,60 @@ def test_structured_sales_decision_requires_two_strategies_and_valid_selection()
     payload["selected_strategy"] = "strategy_3"
     with pytest.raises(ValidationError):
         SalesDecision.model_validate(payload)
+
+
+
+def test_provider_diagnostics_classifies_authentication_without_logging_secrets(caplog):
+    from app.services.ai_gateway import _log_provider_failure
+
+    class FakeAuthenticationError(Exception):
+        status_code = 401
+        code = "invalid_api_key"
+        request_id = "req_12345678"
+
+        def __str__(self):
+            return "request failed with sk-proj-this-must-never-be-logged"
+
+    caplog.set_level("WARNING")
+    _log_provider_failure(FakeAuthenticationError())
+
+    record = next(record for record in caplog.records if record.name == "app.services.ai_gateway")
+    assert record.vantiq_ai_category == "authentication"
+    assert record.vantiq_ai_status_code == 401
+    assert record.vantiq_ai_error_code == "invalid_api_key"
+    assert record.vantiq_ai_request_id == "req_12345678"
+    assert "sk-proj-this-must-never-be-logged" not in caplog.text
+
+
+def test_provider_diagnostics_distinguishes_quota_and_model_errors():
+    from app.services.ai_gateway import _provider_error_diagnostics
+
+    class FakeQuotaError(Exception):
+        status_code = 429
+        code = "insufficient_quota"
+
+    class FakeModelError(Exception):
+        status_code = 404
+        code = "model_not_found"
+
+    quota = _provider_error_diagnostics(FakeQuotaError())
+    model = _provider_error_diagnostics(FakeModelError())
+
+    assert quota["vantiq_ai_category"] == "quota_or_rate_limit"
+    assert quota["vantiq_ai_error_code"] == "insufficient_quota"
+    assert model["vantiq_ai_category"] == "model_or_endpoint"
+    assert model["vantiq_ai_error_code"] == "model_not_found"
+
+
+def test_provider_diagnostics_does_not_copy_unrecognized_error_text():
+    from app.services.ai_gateway import _provider_error_diagnostics
+
+    class FakeUnknownError(Exception):
+        status_code = 400
+        code = "sk-proj-secret-value"
+
+    diagnostics = _provider_error_diagnostics(FakeUnknownError())
+
+    assert diagnostics["vantiq_ai_category"] == "unknown"
+    assert diagnostics["vantiq_ai_error_code"] is None
+    assert "sk-proj-secret-value" not in str(diagnostics)
