@@ -99,3 +99,13 @@ footer { padding: 15px 0 5px; color: #9aa4b2; font-size: 10px; text-align: cente
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
+
+
+.quote-workspace { background: linear-gradient(180deg, #fbfdff 0%, #f7faff 100%); padding: 15px 12px; margin-inline: -12px; border: 1px solid #e5edf6; border-radius: 12px; }
+.coming-soon { flex: 0 0 auto; color: #718096; background: #eef2f7; border-radius: 6px; padding: 3px 7px; font-size: 10px; font-weight: 700; }
+.price-match-pending { display: grid; gap: 5px; margin-top: 12px; padding: 11px 12px; border: 1px dashed #cbd7e5; border-radius: 10px; background: #fff; }
+.price-match-pending b { color: #415b78; font-size: 11px; }
+.price-match-pending strong { color: #7a6540; font-size: 13px; }
+.price-match-pending p { margin: 0; color: #758196; font-size: 11px; line-height: 1.55; }
+.quote-total-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding: 10px 2px 2px; color: #65758a; font-size: 12px; }
+.quote-total-row b { color: #52647a; font-size: 13px; }
