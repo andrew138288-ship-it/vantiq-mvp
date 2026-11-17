@@ -1,8 +1,77 @@
 import json
+import logging
 from openai import AsyncOpenAI
 from pydantic import ValidationError
 from ..db import settings
 from ..schemas import SalesDecision
+
+
+logger = logging.getLogger(__name__)
+
+# Only allow known, non-secret provider error codes into application logs.
+_SAFE_PROVIDER_CODES = {
+    "invalid_api_key",
+    "insufficient_quota",
+    "model_not_found",
+    "rate_limit_exceeded",
+    "billing_hard_limit_reached",
+    "unsupported_value",
+    "context_length_exceeded",
+}
+
+
+def _provider_error_diagnostics(exc: Exception) -> dict[str, str | int | None]:
+    """Return a strictly allowlisted diagnostic record; never include exception text."""
+    status_code = getattr(exc, "status_code", None)
+    if not isinstance(status_code, int):
+        status_code = None
+
+    raw_code = getattr(exc, "code", None)
+    error_code = raw_code if isinstance(raw_code, str) and raw_code in _SAFE_PROVIDER_CODES else None
+
+    request_id = getattr(exc, "request_id", None)
+    if not (
+        isinstance(request_id, str)
+        and request_id.startswith("req_")
+        and 8 <= len(request_id) <= 68
+        and request_id[4:].isalnum()
+    ):
+        request_id = None
+
+    class_name = exc.__class__.__name__
+    if status_code == 401 or error_code == "invalid_api_key":
+        category = "authentication"
+    elif status_code == 403:
+        category = "permission"
+    elif status_code == 404 or error_code == "model_not_found":
+        category = "model_or_endpoint"
+    elif status_code == 429 or error_code in {
+        "insufficient_quota",
+        "rate_limit_exceeded",
+        "billing_hard_limit_reached",
+    }:
+        category = "quota_or_rate_limit"
+    elif status_code is not None and status_code >= 500:
+        category = "provider_server"
+    elif class_name in {"APIConnectionError", "APITimeoutError"}:
+        category = "connection"
+    else:
+        category = "unknown"
+
+    return {
+        "vantiq_ai_category": category,
+        "vantiq_ai_status_code": status_code,
+        "vantiq_ai_error_code": error_code,
+        "vantiq_ai_request_id": request_id,
+    }
+
+
+def _log_provider_failure(exc: Exception) -> None:
+    # Deliberately do not log str(exc), traceback, request payload, headers, or API key.
+    logger.warning(
+        "VANTIQ AI provider request failed",
+        extra=_provider_error_diagnostics(exc),
+    )
 
 
 class AIProviderNotConfigured(Exception):
@@ -67,13 +136,16 @@ async def generate_sales_assist(
             )
         output = response.output_text.strip()
         if not output:
+            logger.warning("VANTIQ AI provider returned an empty response")
             raise AIProviderError("AI provider returned an empty response")
         try:
             decision = SalesDecision.model_validate(json.loads(output))
         except (json.JSONDecodeError, ValidationError) as exc:
+            logger.warning("VANTIQ AI provider returned an invalid sales decision")
             raise AIProviderError("AI provider returned an invalid sales decision") from exc
         return decision, settings.openai_model
     except AIProviderError:
         raise
     except Exception as exc:
+        _log_provider_failure(exc)
         raise AIProviderError("AI provider request failed") from exc
