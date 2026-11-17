@@ -127,6 +127,30 @@ def get_customer_memory(
     return memory
 
 
+@router.get("/{customer_id}/memory/revisions", response_model=list[CustomerMemoryRevisionPublic])
+def list_customer_memory_revisions(
+    customer_id: uuid.UUID,
+    limit: int = Query(default=20, ge=1, le=100),
+    principal: dict = Depends(get_current_principal),
+    db: Session = Depends(get_db),
+):
+    customer = db.scalar(select(Customer).where(
+        Customer.id == customer_id, Customer.tenant_id == principal["tenant_id"]
+    ))
+    if customer is None:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    statement = (
+        select(CustomerMemoryRevision)
+        .where(
+            CustomerMemoryRevision.customer_id == customer_id,
+            CustomerMemoryRevision.tenant_id == principal["tenant_id"],
+        )
+        .order_by(CustomerMemoryRevision.version.desc())
+        .limit(limit)
+    )
+    return list(db.scalars(statement))
+
+
 @router.post("/{customer_id}/memory", response_model=CustomerMemoryPublic)
 def update_customer_memory(
     customer_id: uuid.UUID,
