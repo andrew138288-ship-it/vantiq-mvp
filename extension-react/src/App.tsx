@@ -115,7 +115,6 @@ export default function App({ onReadVisibleChat }: Props) {
   const [customerId, setCustomerId] = useState("");
   const [newCustomer, setNewCustomer] = useState("");
   const [transcript, setTranscript] = useState("");
-  const [messageLimit, setMessageLimit] = useState(10);
   const [responseLocale, setResponseLocale] = useState("zh-CN");
   const [salesGoal, setSalesGoal] = useState("");
   const [authorized, setAuthorized] = useState(false);
@@ -124,6 +123,8 @@ export default function App({ onReadVisibleChat }: Props) {
   const [busy, setBusy] = useState(false);
   const [activeSessions, setActiveSessions] = useState<Array<{session_id:string;created_at:string;last_used_at:string|null;expires_at:string;device:string}>>([]);
   const [exportStatus, setExportStatus] = useState("");
+  const [quoteProduct, setQuoteProduct] = useState("");
+  const [quoteQuantity, setQuoteQuantity] = useState("");
 
   async function loadCustomers(token: string) {
     const result = await apiRequest<Customer[]>("/customers?limit=50", {}, token);
@@ -188,7 +189,9 @@ export default function App({ onReadVisibleChat }: Props) {
       setAuthorized(false);
       setDecision(null);
       setCustomerId("");
-      setAnalysisStatus("检测到 WhatsApp 客户对话切换。旧对话已清空，请重新选择对应的 VANTIQ 客户。");
+      setQuoteProduct("");
+      setQuoteQuantity("");
+      setAnalysisStatus("检测到 WhatsApp 客户对话切换。旧对话和未保存报价草稿已清空，请重新确认客户。");
     };
     const handleSessionRefreshed = (event: Event) => setSession((event as CustomEvent<Session>).detail);
     const handleSessionExpired = () => { setSession(null); setCustomers([]); setAuthStatus("登录已过期，请重新登录。"); };
@@ -368,7 +371,7 @@ export default function App({ onReadVisibleChat }: Props) {
 
   function importVisibleChat() {
     try {
-      const value = onReadVisibleChat(messageLimit);
+      const value = onReadVisibleChat(5);
       setTranscript(value);
       setAuthorized(false);
       setDecision(null);
@@ -397,7 +400,7 @@ export default function App({ onReadVisibleChat }: Props) {
       await apiRequest(`/conversations/${conversation.id}/authorize-context`, {
         method: "POST",
       }, session.accessToken);
-      for (const message of messages.slice(-messageLimit)) {
+      for (const message of messages.slice(-5)) {
         await apiRequest(`/conversations/${conversation.id}/messages`, {
           method: "POST",
           body: message,
@@ -560,7 +563,7 @@ export default function App({ onReadVisibleChat }: Props) {
             <h2>当前客户</h2>
             <p className="human-review">为防止把不同 WhatsApp 联系人的消息归到错误客户，请每次切换对话后手动确认对应客户。</p>
             <label htmlFor="vantiq-customer">选择客户</label>
-            <select id="vantiq-customer" value={customerId} onChange={(e) => { setCustomerId(e.target.value); setTranscript(""); setAuthorized(false); setDecision(null); }}>
+            <select id="vantiq-customer" value={customerId} onChange={(e) => { setCustomerId(e.target.value); setTranscript(""); setAuthorized(false); setDecision(null); setQuoteProduct(""); setQuoteQuantity(""); }}>
               <option value="">请选择并确认对应客户</option>
               {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.display_name}</option>)}
             </select>
@@ -570,13 +573,30 @@ export default function App({ onReadVisibleChat }: Props) {
             </div>
           </section>
 
+          <section className="section quote-workspace">
+            <div className="account-row">
+              <h2>订单与报价</h2>
+              <span className="coming-soon">价格引擎接入中</span>
+            </div>
+            <p className="human-review">识别客户提出的产品和数量后，可在此核对报价草稿。当前仅为 UI 工作区预览，尚未连接价格目录或报价保存接口。</p>
+            <label htmlFor="vantiq-quote-product">产品 / SKU</label>
+            <input id="vantiq-quote-product" value={quoteProduct} onChange={(e) => setQuoteProduct(e.target.value)} placeholder="等待从客户需求中识别，或手动核对" maxLength={200} />
+            <label htmlFor="vantiq-quote-quantity">客户提出的数量</label>
+            <input id="vantiq-quote-quantity" inputMode="decimal" value={quoteQuantity} onChange={(e) => setQuoteQuantity(e.target.value)} placeholder="等待识别数量" maxLength={40} />
+            <div className="price-match-pending">
+              <b>售價匹配</b>
+              <strong>待確認價格</strong>
+              <p>后续自动匹配产品价格表与客户专属价格；客户专属有效价格优先。价格冲突、过期或缺失时必须由你确认。</p>
+            </div>
+            <div className="quote-total-row"><span>报价金额</span><b>待价格确认</b></div>
+            <button className="primary full" disabled title="报价保存 API 尚未接入">手动保存报价单（接口开发中）</button>
+            <p className="human-review">保存功能尚未开放；此处不会把草稿误报为已保存报价。客户提出数量也不代表订单已确认。</p>
+          </section>
+
           <section className="section">
             <h2>读取当前对话</h2>
-            <label htmlFor="vantiq-limit">读取最近可见消息</label>
-            <select id="vantiq-limit" value={messageLimit} onChange={(e) => setMessageLimit(Number(e.target.value))}>
-              {[5, 10, 15, 20].map((n) => <option key={n} value={n}>{n} 条</option>)}
-            </select>
-            <button className="secondary full" onClick={importVisibleChat}>读取当前 WhatsApp 对话</button>
+            <p className="human-review">仅分析当前对话最近 5 条可见消息；不会读取隐藏历史或其他聊天。</p>
+            <button className="secondary full" onClick={importVisibleChat}>读取当前 WhatsApp 对话（最近 5 条）</button>
             <label htmlFor="vantiq-transcript">对话内容（可检查和编辑）</label>
             <textarea id="vantiq-transcript" rows={7} value={transcript} onChange={(e) => setTranscript(e.target.value)} placeholder="点击上方按钮读取当前对话，或粘贴经授权的对话内容。" />
             <label className="consent">
