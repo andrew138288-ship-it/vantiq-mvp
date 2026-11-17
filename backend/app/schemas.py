@@ -159,3 +159,43 @@ class PasswordResetRequest(BaseModel):
 class PasswordResetConfirm(BaseModel):
     token: str = Field(min_length=32, max_length=256)
     new_password: str = Field(min_length=12, max_length=128)
+
+
+class CustomerResolveRequest(BaseModel):
+    channel: str = Field(default="whatsapp", min_length=1, max_length=32)
+    external_ref: str = Field(min_length=1, max_length=160)
+    display_name: str = Field(default="WhatsApp customer", min_length=1, max_length=200)
+    preferred_locale: str | None = Field(default=None, max_length=16)
+
+    @field_validator("external_ref")
+    @classmethod
+    def normalize_external_ref(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("A verified external customer identifier is required")
+        return normalized
+
+
+class CustomerResolveResponse(BaseModel):
+    customer: CustomerPublic
+    created: bool
+
+
+class CustomerMemoryUpdateRequest(BaseModel):
+    summary: str = Field(min_length=1, max_length=20000)
+    structured_data: dict = Field(default_factory=dict)
+    provenance: list[dict] = Field(default_factory=list)
+    idempotency_key: str = Field(min_length=8, max_length=160)
+    expected_version: int = Field(ge=0)
+    source_conversation_id: uuid.UUID | None = None
+    context_version: int | None = Field(default=None, ge=1)
+
+
+class CustomerMemoryPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    customer_id: uuid.UUID
+    summary: str
+    structured_data: dict
+    version: int
+    updated_at: datetime
