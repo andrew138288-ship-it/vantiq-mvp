@@ -140,7 +140,7 @@ The current MVP has no verified product-price catalog, customer price-rule resol
 
 - [ ] Order quantity/product extraction is grounded in authorized visible conversation context and is editable for human correction.
 - [ ] Order intent is not represented as an accepted/confirmed order.
-- [ ] Price resolver supports product price lists, customer-specific prices and attributed historical conversation prices.
+- [ ] Price resolver supports product price lists and customer-specific prices, with customer-specific valid rules taking precedence.
 - [ ] Every matched price exposes source, currency, scope, validity/effective date and quantity tier where applicable.
 - [ ] Missing/conflicting/expired prices require human confirmation; no AI-invented price.
 - [ ] Totals calculate only from confirmed quantities and resolved/approved prices.
