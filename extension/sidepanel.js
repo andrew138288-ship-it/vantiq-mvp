@@ -15,6 +15,8 @@ const customerMemory = document.querySelector("#customer-memory");
 const customerMemoryStatus = document.querySelector("#customer-memory-status");
 const customerMemorySummary = document.querySelector("#customer-memory-summary");
 const customerMemoryVersion = document.querySelector("#customer-memory-version");
+const customerMemoryRevisions = document.querySelector("#customer-memory-revisions");
+const customerMemoryHistory = document.querySelector("#customer-memory-history");
 const analyzeButton = document.querySelector("#analyze");
 const importChatButton = document.querySelector("#import-visible-chat");
 const analysisStatus = document.querySelector("#analysis-status");
@@ -143,6 +145,8 @@ async function loadCustomerMemory(customerId, token) {
   customerMemory.hidden = !customerId;
   customerMemorySummary.textContent = "";
   customerMemoryVersion.textContent = "";
+  customerMemoryRevisions.replaceChildren();
+  customerMemoryHistory.hidden = true;
   if (!customerId) return;
   customerMemoryStatus.textContent = "Loading saved sales memory…";
   try {
@@ -150,6 +154,17 @@ async function loadCustomerMemory(customerId, token) {
     customerMemoryStatus.textContent = "Saved sales summary";
     customerMemorySummary.textContent = memory.summary;
     customerMemoryVersion.textContent = `Version ${memory.version} · Updated ${new Date(memory.updated_at).toLocaleString()}`;
+    const revisions = await apiRequest(`/customers/${encodeURIComponent(customerId)}/memory/revisions?limit=20`, {}, token);
+    for (const revision of revisions) {
+      const item = document.createElement("li");
+      const heading = document.createElement("strong");
+      heading.textContent = `Version ${revision.version} · ${new Date(revision.created_at).toLocaleString()}`;
+      const summary = document.createElement("p");
+      summary.textContent = revision.summary;
+      item.append(heading, summary);
+      customerMemoryRevisions.append(item);
+    }
+    customerMemoryHistory.hidden = revisions.length === 0;
   } catch (error) {
     if (error.status === 404) {
       customerMemoryStatus.textContent = "No saved sales summary yet. It will appear here after the automatic memory workflow is connected.";
