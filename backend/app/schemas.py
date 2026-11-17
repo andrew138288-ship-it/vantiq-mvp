@@ -8,7 +8,6 @@ class RegisterRequest(BaseModel):
     email: str = Field(min_length=5, max_length=320)
     password: str = Field(min_length=12, max_length=128)
     display_name: str = Field(min_length=1, max_length=160)
-    tenant_name: str = Field(min_length=1, max_length=160)
 
     @field_validator("email")
     @classmethod
@@ -17,6 +16,22 @@ class RegisterRequest(BaseModel):
         if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value):
             raise ValueError("A valid email address is required")
         return value
+
+    @field_validator("display_name")
+    @classmethod
+    def normalize_display_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("A name is required")
+        return value
+
+
+class RegistrationAccepted(BaseModel):
+    message: str
+
+
+class EmailVerificationConfirm(BaseModel):
+    token: str = Field(min_length=32, max_length=256)
 
 
 class LoginRequest(BaseModel):
@@ -43,8 +58,27 @@ class UserPublic(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     user: UserPublic
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(min_length=32, max_length=256)
+
+
+class RefreshResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
+class SessionPublic(BaseModel):
+    session_id: uuid.UUID
+    created_at: datetime
+    last_used_at: datetime | None
+    expires_at: datetime
+    device: str
 
 
 class CustomerCreate(BaseModel):

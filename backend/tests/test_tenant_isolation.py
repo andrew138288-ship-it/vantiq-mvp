@@ -254,3 +254,197 @@ def test_login_endpoint_enforces_ip_rate_limit(isolated_client):
         assert limited.status_code == 429
     finally:
         limiter.reset()
+
+
+
+def test_conversation_context_rejects_more_than_twenty_messages(isolated_client):
+    client, token, ids, _ = isolated_client
+    headers = {"Authorization": f"Bearer {token}"}
+    created = client.post(
+        "/api/v1/conversations",
+        headers=headers,
+        json={"customer_id": ids["customer_a"], "channel": "whatsapp"},
+    )
+    assert created.status_code == 201
+    conversation_id = created.json()["id"]
+    authorized = client.post(
+        f"/api/v1/conversations/{conversation_id}/authorize-context",
+        headers=headers,
+    )
+    assert authorized.status_code == 200
+
+    for index in range(20):
+        response = client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=headers,
+            json={"direction": "inbound", "body": f"Visible message {index + 1}"},
+        )
+        assert response.status_code == 201
+
+    overflow = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers=headers,
+        json={"direction": "inbound", "body": "Message 21 must be rejected"},
+    )
+    assert overflow.status_code == 422
+    assert "cannot exceed 20 messages" in overflow.json()["detail"]
+
+
+
+def test_customer_deletion_removes_its_conversations_messages_and_memory(isolated_client):
+    from app.models import CustomerMemory
+
+    client, token, ids, session_factory = isolated_client
+    headers = {"Authorization": f"Bearer {token}"}
+    created_conversation = client.post(
+        "/api/v1/conversations",
+        headers=headers,
+        json={"customer_id": ids["customer_a"], "channel": "whatsapp"},
+    )
+    assert created_conversation.status_code == 201
+    conversation_id = created_conversation.json()["id"]
+    authorized = client.post(
+        f"/api/v1/conversations/{conversation_id}/authorize-context",
+        headers=headers,
+    )
+    assert authorized.status_code == 200
+    added_message = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers=headers,
+        json={"direction": "inbound", "body": "Delete this customer data"},
+    )
+    assert added_message.status_code == 201
+
+    db = session_factory()
+    try:
+        db.add(CustomerMemory(
+            tenant_id=uuid.UUID(ids["tenant_a"]),
+            customer_id=uuid.UUID(ids["customer_a"]),
+            summary="Customer-specific memory",
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    deleted = client.delete(f"/api/v1/customers/{ids['customer_a']}", headers=headers)
+    assert deleted.status_code == 204
+
+    db = session_factory()
+    try:
+        assert db.get(Customer, uuid.UUID(ids["customer_a"])) is None
+        assert db.get(Conversation, uuid.UUID(conversation_id)) is None
+        assert db.query(Message).filter(
+            Message.conversation_id == uuid.UUID(conversation_id)
+        ).count() == 0
+        assert db.query(CustomerMemory).filter(
+            CustomerMemory.customer_id == uuid.UUID(ids["customer_a"])
+        ).count() == 0
+    finally:
+        db.close()
+
+
+def test_customer_deletion_cannot_cross_workspace_boundary(isolated_client):
+    client, token, ids, session_factory = isolated_client
+    response = client.delete(
+        f"/api/v1/customers/{ids['customer_b']}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 404
+
+    db = session_factory()
+    try:
+        assert db.get(Customer, uuid.UUID(ids["customer_b"])) is not None
+    finally:
+        db.close()
+
+
+def test_conversation_deletion_removes_messages_and_is_tenant_scoped(isolated_client):
+    client, token, ids, session_factory = isolated_client
+    headers = {"Authorization": f"Bearer {token}"}
+    created = client.post(
+        "/api/v1/conversations",
+        headers=headers,
+        json={"customer_id": ids["customer_a"], "channel": "whatsapp"},
+    )
+    assert created.status_code == 201
+    conversation_id = created.json()["id"]
+    client.post(
+        f"/api/v1/conversations/{conversation_id}/authorize-context",
+        headers=headers,
+    )
+    added = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers=headers,
+        json={"direction": "inbound", "body": "Conversation content"},
+    )
+    assert added.status_code == 201
+
+    deleted = client.delete(f"/api/v1/conversations/{conversation_id}", headers=headers)
+    assert deleted.status_code == 204
+    missing = client.get(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers=headers,
+    )
+    assert missing.status_code == 404
+
+    foreign_delete = client.delete(
+        f"/api/v1/conversations/{ids['conversation_b']}",
+        headers=headers,
+    )
+    assert foreign_delete.status_code == 404
+
+    db = session_factory()
+    try:
+        assert db.query(Message).filter(
+            Message.conversation_id == uuid.UUID(conversation_id)
+        ).count() == 0
+        assert db.query(Conversation).filter(
+            Conversation.id == uuid.UUID(ids["conversation_b"])
+        ).count() == 1
+    finally:
+        db.close()
+
+
+def test_account_export_contains_current_workspace_data_only_and_no_secrets(isolated_client):
+    client, token, ids, session_factory = isolated_client
+    headers = {"Authorization": f"Bearer {token}"}
+    conversation = client.post(
+        "/api/v1/conversations",
+        headers=headers,
+        json={"customer_id": ids["customer_a"], "channel": "whatsapp"},
+    )
+    assert conversation.status_code == 201
+    conversation_id = conversation.json()["id"]
+    assert client.post(
+        f"/api/v1/conversations/{conversation_id}/authorize-context",
+        headers=headers,
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers=headers,
+        json={"direction": "inbound", "body": "Export this workspace message"},
+    ).status_code == 201
+
+    response = client.get("/api/v1/auth/export", headers=headers)
+    assert response.status_code == 200
+    assert "attachment" in response.headers.get("content-disposition", "")
+    data = response.json()
+
+    assert data["scope"] == "account_profile_and_currently_selected_workspace"
+    assert data["account"]["email"] == "a@example.com"
+    assert data["workspace"]["id"] == ids["tenant_a"]
+    assert {row["id"] for row in data["customers"]} == {ids["customer_a"]}
+    assert all(row["id"] != ids["customer_b"] for row in data["customers"])
+    assert "Export this workspace message" in {row["body"] for row in data["messages"]}
+    assert "Private message from workspace B" not in {row["body"] for row in data["messages"]}
+    assert "password_hash" not in data["account"]
+    assert "refresh_token" not in data
+    assert "token_hash" not in str(data)
+
+
+
+
+def test_account_export_requires_authentication(isolated_client):
+    client, _, _, _ = isolated_client
+    response = client.get("/api/v1/auth/export")
+    assert response.status_code == 401

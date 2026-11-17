@@ -64,6 +64,8 @@ def test_password_reset_changes_password_and_token_is_single_use(reset_client, m
     client, session_factory = reset_client
     sent = []
     monkeypatch.setattr(auth_router, "send_password_reset_email", lambda email, token: sent.append((email, token)))
+    old_session = client.post("/api/v1/auth/login", json={"email": "reset@example.com", "password": OLD_PASSWORD})
+    assert old_session.status_code == 200
 
     requested = client.post("/api/v1/auth/password-reset/request", json={"email": "RESET@example.com"})
     assert requested.status_code == 202
@@ -81,6 +83,16 @@ def test_password_reset_changes_password_and_token_is_single_use(reset_client, m
     assert login_new.status_code == 200
     login_old = client.post("/api/v1/auth/login", json={"email": "reset@example.com", "password": OLD_PASSWORD})
     assert login_old.status_code == 401
+    revoked_session = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {old_session.json()['access_token']}"},
+    )
+    assert revoked_session.status_code == 401
+    revoked_refresh = client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": old_session.json()["refresh_token"]},
+    )
+    assert revoked_refresh.status_code == 401
 
     reused = client.post(
         "/api/v1/auth/password-reset/confirm",

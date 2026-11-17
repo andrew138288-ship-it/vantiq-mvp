@@ -6,23 +6,32 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..dependencies import get_db, get_current_principal
-from ..models import Tenant, User, TenantMembership, PasswordResetToken
+from ..models import (
+    Tenant, User, TenantMembership, Customer, Conversation, Message, CustomerMemory,
+    PasswordResetToken, EmailVerificationToken, RefreshSession,
+)
 from ..rate_limit import limiter
 from ..schemas import (
-    RegisterRequest, LoginRequest, TokenResponse, UserPublic,
-    PasswordResetRequest, PasswordResetConfirm,
+    RegisterRequest, RegistrationAccepted, EmailVerificationConfirm,
+    LoginRequest, TokenResponse, UserPublic,
+    PasswordResetRequest, PasswordResetConfirm, RefreshRequest, RefreshResponse, SessionPublic,
 )
 from ..security import hash_password, verify_password, create_access_token
-from ..email import send_password_reset_email
+from ..email import send_password_reset_email, send_email_verification
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["authentication"])
 RESET_TOKEN_MINUTES = 30
+VERIFICATION_TOKEN_HOURS = 24
+REFRESH_TOKEN_DAYS = 30
+REGISTRATION_MESSAGE = "If registration can be completed, a verification email will be sent."
+RESEND_MESSAGE = "If the account exists and needs verification, an email will be sent."
 
 
 def _slugify(value: str) -> str:
@@ -34,16 +43,54 @@ def _token_digest(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+def _create_refresh_session(db: Session, user: User, user_agent: str | None) -> str:
+    raw = secrets.token_urlsafe(48)
+    now = datetime.now(timezone.utc)
+    db.add(RefreshSession(user_id=user.id, session_id=uuid.uuid4(), family_id=uuid.uuid4(), token_hash=_token_digest(raw), user_agent=(user_agent or "")[:300] or None, expires_at=now + timedelta(days=REFRESH_TOKEN_DAYS)))
+    return raw
+
+
+def _new_verification_token(db: Session, user: User) -> str:
+    now = datetime.now(timezone.utc)
+    db.execute(
+        update(EmailVerificationToken)
+        .where(
+            EmailVerificationToken.user_id == user.id,
+            EmailVerificationToken.used_at.is_(None),
+        )
+        .values(used_at=now)
+    )
+    raw_token = secrets.token_urlsafe(32)
+    db.add(
+        EmailVerificationToken(
+            user_id=user.id,
+            token_hash=_token_digest(raw_token),
+            expires_at=now + timedelta(hours=VERIFICATION_TOKEN_HOURS),
+        )
+    )
+    return raw_token
+
+
+@router.post(
+    "/register",
+    response_model=RegistrationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 @limiter.limit("3/hour")
 def register(request: Request, payload: RegisterRequest, db: Session = Depends(get_db)):
+    # Same response for new and existing addresses to avoid account enumeration.
     if db.scalar(select(User).where(User.email == payload.email)):
-        raise HTTPException(status_code=409, detail="Email is already registered")
-    tenant = Tenant(name=payload.tenant_name.strip(), slug=_slugify(payload.tenant_name))
+        return {"message": REGISTRATION_MESSAGE}
+
+    display_name = payload.display_name.strip()
+    tenant = Tenant(name=display_name, slug=_slugify(display_name))
     user = User(
         email=payload.email,
-        display_name=payload.display_name.strip(),
+        display_name=display_name,
         password_hash=hash_password(payload.password),
+        is_active=True,
+        is_email_verified=False,
+        account_status="pending_verification",
     )
     try:
         db.add(tenant)
@@ -51,24 +98,107 @@ def register(request: Request, payload: RegisterRequest, db: Session = Depends(g
         db.add(user)
         db.flush()
         db.add(TenantMembership(tenant_id=tenant.id, user_id=user.id, role="owner"))
+        raw_token = _new_verification_token(db, user)
         db.commit()
-        db.refresh(user)
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Account could not be created with these details")
-    token = create_access_token(user_id=str(user.id), tenant_id=str(tenant.id), role="owner")
-    return TokenResponse(
-        access_token=token,
-        user=UserPublic(id=user.id, email=user.email, display_name=user.display_name, tenant_id=tenant.id, role="owner"),
+        return {"message": REGISTRATION_MESSAGE}
+
+    try:
+        send_email_verification(user.email, raw_token)
+    except Exception:
+        logger.exception("Registration verification email could not be sent")
+        # User can request another message through /resend-verification.
+    return {"message": REGISTRATION_MESSAGE}
+
+
+@router.post("/verify-email")
+@limiter.limit("10/hour")
+def verify_email(
+    request: Request,
+    payload: EmailVerificationConfirm,
+    db: Session = Depends(get_db),
+):
+    token = db.scalar(
+        select(EmailVerificationToken).where(
+            EmailVerificationToken.token_hash == _token_digest(payload.token)
+        )
     )
+    now = datetime.now(timezone.utc)
+    if token is None or token.used_at is not None:
+        raise HTTPException(status_code=400, detail="Verification token is invalid or expired")
+
+    expires_at = token.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at <= now:
+        raise HTTPException(status_code=400, detail="Verification token is invalid or expired")
+
+    user = db.get(User, token.user_id)
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=400, detail="Verification token is invalid or expired")
+
+    consumed = db.execute(
+        update(EmailVerificationToken)
+        .where(
+            EmailVerificationToken.id == token.id,
+            EmailVerificationToken.used_at.is_(None),
+        )
+        .values(used_at=now)
+    )
+    if consumed.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Verification token is invalid or expired")
+
+    user.is_email_verified = True
+    user.account_status = "free_active"
+    db.execute(
+        update(EmailVerificationToken)
+        .where(
+            EmailVerificationToken.user_id == user.id,
+            EmailVerificationToken.id != token.id,
+            EmailVerificationToken.used_at.is_(None),
+        )
+        .values(used_at=now)
+    )
+    db.commit()
+    return {"message": "Email verified. Your free VANTIQ account is now active. You can sign in."}
+
+
+@router.post("/resend-verification", status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("3/hour")
+def resend_verification(
+    request: Request,
+    payload: PasswordResetRequest,
+    db: Session = Depends(get_db),
+):
+    user = db.scalar(select(User).where(User.email == payload.email))
+    if user is None or not user.is_active or user.account_status != "pending_verification":
+        return {"message": RESEND_MESSAGE}
+
+    raw_token = _new_verification_token(db, user)
+    db.commit()
+    try:
+        send_email_verification(user.email, raw_token)
+    except Exception:
+        logger.exception("Verification email resend failed")
+    return {"message": RESEND_MESSAGE}
 
 
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("5/minute")
 def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.email == payload.email))
-    if user is None or not user.is_active or not verify_password(payload.password, user.password_hash):
+    if user is None or not user.is_active or user.account_status in {"suspended", "closed"} or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Email or password is incorrect")
+    if user.account_status == "pending_verification" or not user.is_email_verified:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "email_not_verified",
+                "message": "Please verify your email before signing in.",
+            },
+        )
 
     memberships = list(
         db.scalars(
@@ -100,9 +230,13 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
         user_id=str(user.id),
         tenant_id=str(membership.tenant_id),
         role=membership.role,
+        token_version=user.token_version,
     )
+    refresh_token = _create_refresh_session(db, user, request.headers.get("user-agent"))
+    db.commit()
     return TokenResponse(
         access_token=token,
+        refresh_token=refresh_token,
         user=UserPublic(
             id=user.id,
             email=user.email,
@@ -123,7 +257,7 @@ def request_password_reset(
     # Always return the same response to prevent account enumeration.
     generic_response = {"message": "If the account exists, password reset instructions will be sent."}
     user = db.scalar(select(User).where(User.email == payload.email))
-    if user is None or not user.is_active:
+    if user is None or not user.is_active or user.account_status != "free_active" or not user.is_email_verified:
         return generic_response
 
     now = datetime.now(timezone.utc)
@@ -144,7 +278,6 @@ def request_password_reset(
         send_password_reset_email(user.email, raw_token)
     except Exception:
         logger.exception("Password reset email could not be sent")
-        # Do not expose account existence or SMTP details to the caller.
     return generic_response
 
 
@@ -170,17 +303,124 @@ def confirm_password_reset(
         raise HTTPException(status_code=400, detail="Reset token is invalid or expired")
 
     user = db.get(User, reset.user_id)
-    if user is None or not user.is_active:
+    if user is None or not user.is_active or user.account_status != "free_active" or not user.is_email_verified:
+        raise HTTPException(status_code=400, detail="Reset token is invalid or expired")
+
+    consumed = db.execute(
+        update(PasswordResetToken)
+        .where(
+            PasswordResetToken.id == reset.id,
+            PasswordResetToken.used_at.is_(None),
+        )
+        .values(used_at=now)
+    )
+    if consumed.rowcount != 1:
+        db.rollback()
         raise HTTPException(status_code=400, detail="Reset token is invalid or expired")
 
     user.password_hash = hash_password(payload.new_password)
+    user.token_version += 1
+    db.execute(update(RefreshSession).where(RefreshSession.user_id == user.id, RefreshSession.revoked_at.is_(None)).values(revoked_at=now))
     db.execute(
         update(PasswordResetToken)
-        .where(PasswordResetToken.user_id == user.id, PasswordResetToken.used_at.is_(None))
+        .where(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.id != reset.id,
+            PasswordResetToken.used_at.is_(None),
+        )
         .values(used_at=now)
     )
     db.commit()
     return {"message": "Password has been reset. Please sign in with your new password."}
+
+
+@router.post("/refresh", response_model=RefreshResponse)
+@limiter.limit("30/hour")
+def refresh_access_token(request: Request, payload: RefreshRequest, db: Session = Depends(get_db)):
+    now = datetime.now(timezone.utc)
+    row = db.scalar(select(RefreshSession).where(RefreshSession.token_hash == _token_digest(payload.refresh_token)))
+    if row is None:
+        raise HTTPException(status_code=401, detail="Refresh token is invalid or expired")
+    if row.revoked_at is not None:
+        db.execute(update(RefreshSession).where(RefreshSession.family_id == row.family_id, RefreshSession.revoked_at.is_(None)).values(revoked_at=now))
+        db.commit()
+        raise HTTPException(status_code=401, detail="Refresh token reuse detected; please sign in again")
+    expires_at = row.expires_at if row.expires_at.tzinfo else row.expires_at.replace(tzinfo=timezone.utc)
+    if expires_at <= now:
+        row.revoked_at = now
+        db.commit()
+        raise HTTPException(status_code=401, detail="Refresh token is invalid or expired")
+    consumed = db.execute(update(RefreshSession).where(RefreshSession.id == row.id, RefreshSession.revoked_at.is_(None), RefreshSession.expires_at > now).values(revoked_at=now, last_used_at=now).execution_options(synchronize_session=False))
+    if consumed.rowcount != 1:
+        # Another request may have rotated this token after our initial read.
+        # Treat the losing concurrent request as token reuse and revoke the
+        # whole family, rather than leaving the winning descendant active.
+        family_id = row.family_id
+        db.rollback()
+        db.execute(
+            update(RefreshSession)
+            .where(
+                RefreshSession.family_id == family_id,
+                RefreshSession.revoked_at.is_(None),
+            )
+            .values(revoked_at=now)
+        )
+        db.commit()
+        raise HTTPException(status_code=401, detail="Refresh token reuse detected; please sign in again")
+    user = db.get(User, row.user_id)
+    if user is None or not user.is_active or user.account_status != "free_active" or not user.is_email_verified:
+        db.rollback()
+        raise HTTPException(status_code=401, detail="Account is not active")
+    membership = db.scalar(select(TenantMembership).where(TenantMembership.user_id == user.id).order_by(TenantMembership.created_at))
+    if membership is None:
+        db.rollback()
+        raise HTTPException(status_code=401, detail="Account membership is unavailable")
+    raw = secrets.token_urlsafe(48)
+    db.add(RefreshSession(user_id=user.id, session_id=row.session_id, family_id=row.family_id, token_hash=_token_digest(raw), user_agent=(request.headers.get("user-agent") or row.user_agent or "")[:300] or None, expires_at=now + timedelta(days=REFRESH_TOKEN_DAYS)))
+    access = create_access_token(user_id=str(user.id), tenant_id=str(membership.tenant_id), role=membership.role, token_version=user.token_version)
+    db.commit()
+    return RefreshResponse(access_token=access, refresh_token=raw)
+
+
+@router.post("/logout")
+def logout(payload: RefreshRequest, db: Session = Depends(get_db)):
+    row = db.scalar(select(RefreshSession).where(RefreshSession.token_hash == _token_digest(payload.refresh_token)))
+    if row is not None and row.revoked_at is None:
+        now = datetime.now(timezone.utc)
+        db.execute(update(RefreshSession).where(RefreshSession.user_id == row.user_id, RefreshSession.session_id == row.session_id, RefreshSession.revoked_at.is_(None)).values(revoked_at=now))
+        db.commit()
+    return {"message": "Logged out"}
+
+
+@router.post("/logout-all")
+def logout_all(principal: dict = Depends(get_current_principal), db: Session = Depends(get_db)):
+    now = datetime.now(timezone.utc)
+    user = db.get(User, principal["user_id"])
+    db.execute(update(RefreshSession).where(RefreshSession.user_id == principal["user_id"], RefreshSession.revoked_at.is_(None)).values(revoked_at=now))
+    if user is not None:
+        user.token_version += 1
+    db.commit()
+    return {"message": "All sessions have been revoked"}
+
+
+@router.get("/sessions", response_model=list[SessionPublic])
+def list_sessions(principal: dict = Depends(get_current_principal), db: Session = Depends(get_db)):
+    now = datetime.now(timezone.utc)
+    rows = list(db.scalars(select(RefreshSession).where(RefreshSession.user_id == principal["user_id"], RefreshSession.revoked_at.is_(None), RefreshSession.expires_at > now).order_by(RefreshSession.created_at.desc())).all())
+    latest = {}
+    for row in rows:
+        latest.setdefault(row.session_id, row)
+    return [SessionPublic(session_id=row.session_id, created_at=row.created_at, last_used_at=row.last_used_at, expires_at=row.expires_at, device=(row.user_agent or "Unknown device")[:120]) for row in latest.values()]
+
+
+@router.delete("/sessions/{session_id}")
+def revoke_session(session_id: uuid.UUID, principal: dict = Depends(get_current_principal), db: Session = Depends(get_db)):
+    now = datetime.now(timezone.utc)
+    result = db.execute(update(RefreshSession).where(RefreshSession.user_id == principal["user_id"], RefreshSession.session_id == session_id, RefreshSession.revoked_at.is_(None)).values(revoked_at=now))
+    db.commit()
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"message": "Session revoked"}
 
 
 @router.get("/me", response_model=UserPublic)
@@ -190,3 +430,106 @@ def me(principal: dict = Depends(get_current_principal)):
         display_name=principal["display_name"], tenant_id=principal["tenant_id"],
         role=principal["role"]
     )
+
+@router.get("/export")
+def export_account_data(principal: dict = Depends(get_current_principal), db: Session = Depends(get_db)):
+    """Export the signed-in user's profile and records in the currently selected workspace."""
+    user = db.get(User, principal["user_id"])
+    tenant = db.get(Tenant, principal["tenant_id"])
+    if user is None or tenant is None:
+        raise HTTPException(status_code=404, detail="Account workspace not found")
+
+    customers = list(db.scalars(
+        select(Customer)
+        .where(Customer.tenant_id == principal["tenant_id"])
+        .order_by(Customer.created_at.asc())
+    ).all())
+    conversations = list(db.scalars(
+        select(Conversation)
+        .where(Conversation.tenant_id == principal["tenant_id"])
+        .order_by(Conversation.created_at.asc())
+    ).all())
+    memories = list(db.scalars(
+        select(CustomerMemory)
+        .where(CustomerMemory.tenant_id == principal["tenant_id"])
+        .order_by(CustomerMemory.updated_at.asc())
+    ).all())
+    messages = list(db.scalars(
+        select(Message)
+        .where(Message.tenant_id == principal["tenant_id"])
+        .order_by(Message.created_at.asc())
+    ).all())
+    sessions = list(db.scalars(
+        select(RefreshSession)
+        .where(RefreshSession.user_id == principal["user_id"])
+        .order_by(RefreshSession.created_at.asc())
+    ).all())
+
+    payload = {
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "scope": "account_profile_and_currently_selected_workspace",
+        "account": {
+            "id": str(user.id),
+            "email": user.email,
+            "display_name": user.display_name,
+            "email_verified": user.is_email_verified,
+            "account_status": user.account_status,
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+        },
+        "workspace": {
+            "id": str(tenant.id),
+            "name": tenant.name,
+            "role": principal["role"],
+        },
+        "customers": [{
+            "id": str(row.id),
+            "display_name": row.display_name,
+            "external_ref": row.external_ref,
+            "preferred_locale": row.preferred_locale,
+            "notes": row.notes,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        } for row in customers],
+        "conversations": [{
+            "id": str(row.id),
+            "customer_id": str(row.customer_id),
+            "channel": row.channel,
+            "context_version": row.context_version,
+            "context_authorized_at": row.context_authorized_at.isoformat() if row.context_authorized_at else None,
+            "is_active": row.is_active,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        } for row in conversations],
+        "messages": [{
+            "id": str(row.id),
+            "conversation_id": str(row.conversation_id),
+            "direction": row.direction,
+            "body": row.body,
+            "source": row.source,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        } for row in messages],
+        "customer_memories": [{
+            "id": str(row.id),
+            "customer_id": str(row.customer_id),
+            "summary": row.summary,
+            "version": row.version,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        } for row in memories],
+        "sessions": [{
+            "session_id": str(row.session_id),
+            "user_agent": row.user_agent,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "last_used_at": row.last_used_at.isoformat() if row.last_used_at else None,
+            "expires_at": row.expires_at.isoformat() if row.expires_at else None,
+            "revoked_at": row.revoked_at.isoformat() if row.revoked_at else None,
+        } for row in sessions],
+        "exclusions": [
+            "password_hashes and raw authentication tokens",
+            "records belonging to other workspaces",
+            "database backups, infrastructure logs, and third-party provider copies",
+        ],
+    }
+    return JSONResponse(
+        content=payload,
+        headers={"Content-Disposition": 'attachment; filename="vantiq-data-export.json"'},
+    )
+

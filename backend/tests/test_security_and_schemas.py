@@ -31,9 +31,9 @@ def test_registration_normalizes_email():
         email="  SALES@EXAMPLE.COM ",
         password="Vantiq-Test-Password-2026!",
         display_name="Pilot User",
-        tenant_name="Pilot Workspace",
     )
     assert payload.email == "sales@example.com"
+    assert payload.display_name == "Pilot User"
 
 
 def test_registration_rejects_short_password():
@@ -42,7 +42,6 @@ def test_registration_rejects_short_password():
             email="sales@example.com",
             password="short",
             display_name="Pilot User",
-            tenant_name="Pilot Workspace",
         )
 
 

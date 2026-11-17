@@ -1,9 +1,9 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from ..dependencies import get_db, get_current_principal
-from ..models import Customer
+from ..models import Customer, CustomerMemory, Conversation, Message
 from ..schemas import CustomerCreate, CustomerUpdate, CustomerPublic
 
 router = APIRouter(prefix="/customers", tags=["customers"])
@@ -76,3 +76,47 @@ def update_customer(
     db.commit()
     db.refresh(customer)
     return customer
+
+
+@router.delete("/{customer_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_customer(
+    customer_id: uuid.UUID,
+    principal: dict = Depends(get_current_principal),
+    db: Session = Depends(get_db),
+):
+    customer = db.scalar(
+        select(Customer).where(
+            Customer.id == customer_id,
+            Customer.tenant_id == principal["tenant_id"],
+        )
+    )
+    if customer is None:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    # Explicitly delete dependent records instead of relying on database-specific
+    # cascade settings. All predicates remain tenant-scoped.
+    conversation_ids = select(Conversation.id).where(
+        Conversation.customer_id == customer.id,
+        Conversation.tenant_id == principal["tenant_id"],
+    )
+    db.execute(
+        delete(Message).where(
+            Message.conversation_id.in_(conversation_ids),
+            Message.tenant_id == principal["tenant_id"],
+        )
+    )
+    db.execute(
+        delete(Conversation).where(
+            Conversation.customer_id == customer.id,
+            Conversation.tenant_id == principal["tenant_id"],
+        )
+    )
+    db.execute(
+        delete(CustomerMemory).where(
+            CustomerMemory.customer_id == customer.id,
+            CustomerMemory.tenant_id == principal["tenant_id"],
+        )
+    )
+    db.delete(customer)
+    db.commit()
+    return None

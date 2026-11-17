@@ -1,13 +1,14 @@
 import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 from ..dependencies import get_db, get_current_principal
 from ..models import Customer, Conversation, Message
 from ..schemas import ConversationCreate, ConversationPublic, MessageCreate, MessagePublic
 
 router = APIRouter(tags=["conversations"])
+MAX_AUTHORIZED_MESSAGES = 20
 
 
 def _get_conversation(db: Session, conversation_id: uuid.UUID, tenant_id: uuid.UUID) -> Conversation:
@@ -78,6 +79,17 @@ def add_message(
             status_code=403,
             detail="Explicitly authorize this conversation context before adding messages",
         )
+    message_count = db.scalar(
+        select(func.count(Message.id)).where(
+            Message.conversation_id == conversation.id,
+            Message.tenant_id == principal["tenant_id"],
+        )
+    ) or 0
+    if message_count >= MAX_AUTHORIZED_MESSAGES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"A single analysis context cannot exceed {MAX_AUTHORIZED_MESSAGES} messages",
+        )
     message = Message(
         tenant_id=principal["tenant_id"],
         conversation_id=conversation.id,
@@ -113,3 +125,21 @@ def list_messages(
         .limit(limit)
     )
     return list(db.scalars(statement))
+
+
+@router.delete("/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_conversation(
+    conversation_id: uuid.UUID,
+    principal: dict = Depends(get_current_principal),
+    db: Session = Depends(get_db),
+):
+    conversation = _get_conversation(db, conversation_id, principal["tenant_id"])
+    db.execute(
+        delete(Message).where(
+            Message.conversation_id == conversation.id,
+            Message.tenant_id == principal["tenant_id"],
+        )
+    )
+    db.delete(conversation)
+    db.commit()
+    return None

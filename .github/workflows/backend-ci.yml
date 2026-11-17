@@ -1,10 +1,13 @@
 name: Backend CI
 
+permissions:
+  contents: write
+
 on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, feat/react-whatsapp-dock]
 
 jobs:
   backend:
@@ -29,6 +32,8 @@ jobs:
       PYTHONPATH: backend
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -36,6 +41,47 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Resolve and generate React extension dependency lockfile
+        working-directory: extension-react
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Commit generated React extension lockfile
+        continue-on-error: true
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add extension-react/package-lock.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(extension): lock React dock dependencies"
+            TARGET_REF="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+            git push origin "HEAD:$TARGET_REF"
+          fi
+      - name: Install locked React extension dependencies
+        working-directory: extension-react
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Test and typecheck React extension
+        working-directory: extension-react
+        run: npm test
+      - name: Build React WhatsApp dock
+        working-directory: extension-react
+        env:
+          VITE_API_BASE: https://vantiq-mvp-production-97577cdb.up.railway.app
+        run: npm run build
+      - name: Package React WhatsApp dock
+        run: python extension-react/package.py
+      - name: Upload generated npm lockfile for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: vantiq-react-extension-lockfile
+          path: extension-react/package-lock.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload installable React Chrome extension
+        uses: actions/upload-artifact@v4
+        with:
+          name: vantiq-react-whatsapp-dock
+          path: dist/VANTIQ-WhatsApp-Dock-0.2.0.zip
+          if-no-files-found: error
+          retention-days: 14
       - name: Validate extension JavaScript syntax
         run: |
           node --check extension/content.js
