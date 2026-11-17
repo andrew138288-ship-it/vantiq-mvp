@@ -9,6 +9,10 @@ VANTIQ automatically identifies the customer in the currently open WhatsApp conv
 
 This feature is customer memory for sales continuity, not bulk contact collection or a general-purpose CRM.
 
+**WhatsApp is a communication channel, not a transaction or payment system.** VANTIQ must not assume that WhatsApp contains order, payment, invoice, or actual transaction-value data. It must not claim to capture GMV, revenue, order value, payment amount, or completed transaction totals from WhatsApp. Such values are unavailable unless explicitly stated in the conversation or supplied through a separately authorized, verified data source. A quoted price, budget, estimate, or negotiation amount is not a completed transaction amount and must retain its correct label and provenance.
+
+The MVP focuses on conversation intelligence: customer needs, requirements, preferences, decision criteria, buying signals, objections, negotiation context, commitments, follow-up actions, and relationship continuity. Buying stage and sales outcomes are recorded only as evidence-supported conversation states, not as proof of a completed transaction.
+
 ## 2. Identity and deduplication
 
 - Scope every customer lookup and write to the authenticated tenant.
@@ -34,16 +38,16 @@ Maintain a structured, versioned summary with these sections where supported by 
 2. First-contact and last-contact timestamps.
 3. Customer's stated needs, use case, and requirements.
 4. Decision criteria and priorities (e.g. price, quality, delivery, reliability).
-5. Budget or price expectations only when explicitly stated; retain currency and attribution.
+5. Budget or price expectations only when explicitly stated; retain currency and attribution. Clearly distinguish budget, quoted price, offer, estimate, and negotiated price; none is a completed transaction amount by default.
 6. Buying motivation and observed buying signals.
 7. Objections, concerns, and unresolved questions.
 8. Buying stage and evidence supporting the stage.
-9. Strategies previously recommended or selected, plus recorded outcomes when known.
+9. Strategies previously recommended or selected, plus recorded conversation outcomes when known. Do not treat a positive reply, verbal interest, or negotiation progress as a verified order or payment.
 10. Confirmed commitments and next steps, with owner and due date only when explicit or user-approved.
 11. Communication language/locale when reliably detected; preserve locale distinctions such as pt-BR vs pt-PT.
 12. Unknowns, contradictions, and items requiring human confirmation.
 
-Do not invent facts, budget, authority, purchase intent, timing, product specifications, stock, price, discounts, delivery dates, warranty, certifications, or commitments. Distinguish customer-stated facts, user-entered facts, AI inferences, and unknowns. Store confidence/provenance for extracted claims; label inferences as inferences.
+Do not invent facts, budget, authority, purchase intent, timing, product specifications, stock, price, discounts, delivery dates, warranty, certifications, commitments, orders, payments, or transaction values. Distinguish customer-stated facts, user-entered facts, AI inferences, and unknowns. Store confidence/provenance for extracted claims; label inferences as inferences.
 
 ## 5. Update behavior
 
@@ -54,6 +58,7 @@ Do not invent facts, budget, authority, purchase intent, timing, product specifi
 - Serialize or use optimistic version checks for concurrent updates. A stale analysis must not overwrite a newer summary.
 - Save a new memory revision/audit event containing the changed fields, source conversation, source context version, timestamp, and model/version metadata. Do not store hidden/raw WhatsApp history as a substitute for the summary.
 - If extraction or persistence fails, retain the previous valid summary and surface a recoverable status; never show a false "saved" success.
+- Do not calculate or display revenue, GMV, order value, payment totals, conversion value, or transaction amount from WhatsApp conversation data. If an amount appears, store it only with its explicit meaning (for example, customer-stated budget or seller quotation), currency, speaker/source, and timestamp. Actual transaction metrics require a separately authorized and verified transaction data integration, which is outside this WhatsApp MVP.
 
 ## 6. Customer controls and transparency
 
@@ -78,7 +83,7 @@ The customer profile should show:
 - Recommended next action and any explicitly confirmed follow-up.
 - Provenance and uncertainty labels.
 
-Do not include a manual "Add customer" action. Do not include an auto-send action. AI replies remain editable and require the user to insert/copy and manually send.
+Do not present a transaction-value dashboard or imply WhatsApp provides actual sales/revenue figures. Do not include a manual "Add customer" action. Do not include an auto-send action. AI replies remain editable and require the user to insert/copy and manually send.
 
 ## 8. Existing repository observations (2026-11-17)
 
@@ -87,7 +92,6 @@ Do not include a manual "Add customer" action. Do not include an auto-send actio
 - The current customers API exposes manual POST /customers, list/get/patch endpoints. The manual create route must be removed from the user-facing product workflow or restricted to internal migration/admin use; the extension's automatic identification path needs a safe upsert/resolve endpoint.
 - The current conversation message endpoint accepts authorized message payloads and allows a configurable API limit. The WhatsApp ingestion contract must enforce the fixed five-visible-message policy at the extension boundary and validate it server-side for the AI/memory workflow.
 - The existing Customer.external_ref is not currently protected by a tenant+channel uniqueness constraint. Add an explicit channel identity model or equivalent unique constraint before enabling automatic customer creation.
-- The current repository has an open React extension PR (#7) whose description includes configurable 5/10/15/20 message limits. This conflicts with the approved fixed-five requirement and must be reconciled before merge.
 - This document is a product/engineering specification, not evidence that the feature is implemented.
 
 ## 9. Implementation sequence
@@ -109,6 +113,7 @@ P0 — extension and UI:
 - Display automatic record/save status and customer summary.
 - Ensure B full right-side panel and C floating assistant never cover WhatsApp content or composer.
 - Keep reply editing/copy/insertion user-controlled; never auto-send.
+- Exclude transaction/revenue dashboards from the WhatsApp MVP unless a separately authorized transaction source is later integrated.
 
 P1 — customer memory experience:
 - Display summary revisions and changed facts.
@@ -124,6 +129,8 @@ P1 — customer memory experience:
 - Switching customers prevents prior customer data or late async results from entering the new customer's context.
 - A successful save creates an auditable, versioned summary update; a failed save is never shown as successful.
 - Customer summaries distinguish explicit facts, user-entered facts, AI inferences, and unknowns.
+- Quoted prices, budgets, offers, estimates, orders, payments, and completed transactions are never conflated.
+- No revenue/GMV/transaction amount is inferred from WhatsApp. Transaction metrics are unavailable unless provided by a separate verified integration.
 - Retries are idempotent and stale writes cannot overwrite newer memory.
 - No automatic WhatsApp message sending is introduced.
 - Automated tests and CI pass before the implementation PR is considered ready.
