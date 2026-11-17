@@ -115,7 +115,6 @@ export default function App({ onReadVisibleChat }: Props) {
   const [customerId, setCustomerId] = useState("");
   const [newCustomer, setNewCustomer] = useState("");
   const [transcript, setTranscript] = useState("");
-  const [messageLimit, setMessageLimit] = useState(10);
   const [responseLocale, setResponseLocale] = useState("zh-CN");
   const [salesGoal, setSalesGoal] = useState("");
   const [authorized, setAuthorized] = useState(false);
@@ -368,7 +367,7 @@ export default function App({ onReadVisibleChat }: Props) {
 
   function importVisibleChat() {
     try {
-      const value = onReadVisibleChat(messageLimit);
+      const value = onReadVisibleChat(5);
       setTranscript(value);
       setAuthorized(false);
       setDecision(null);
@@ -397,7 +396,7 @@ export default function App({ onReadVisibleChat }: Props) {
       await apiRequest(`/conversations/${conversation.id}/authorize-context`, {
         method: "POST",
       }, session.accessToken);
-      for (const message of messages.slice(-messageLimit)) {
+      for (const message of messages.slice(-5)) {
         await apiRequest(`/conversations/${conversation.id}/messages`, {
           method: "POST",
           body: message,
@@ -572,11 +571,8 @@ export default function App({ onReadVisibleChat }: Props) {
 
           <section className="section">
             <h2>读取当前对话</h2>
-            <label htmlFor="vantiq-limit">读取最近可见消息</label>
-            <select id="vantiq-limit" value={messageLimit} onChange={(e) => setMessageLimit(Number(e.target.value))}>
-              {[5, 10, 15, 20].map((n) => <option key={n} value={n}>{n} 条</option>)}
-            </select>
-            <button className="secondary full" onClick={importVisibleChat}>读取当前 WhatsApp 对话</button>
+            <p className="human-review">仅分析当前对话最近 5 条可见消息；不会读取隐藏历史或其他聊天。</p>
+            <button className="secondary full" onClick={importVisibleChat}>读取当前 WhatsApp 对话（最近 5 条）</button>
             <label htmlFor="vantiq-transcript">对话内容（可检查和编辑）</label>
             <textarea id="vantiq-transcript" rows={7} value={transcript} onChange={(e) => setTranscript(e.target.value)} placeholder="点击上方按钮读取当前对话，或粘贴经授权的对话内容。" />
             <label className="consent">
