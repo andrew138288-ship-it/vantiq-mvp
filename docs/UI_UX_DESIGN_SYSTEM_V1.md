@@ -96,13 +96,13 @@ These are recorded as implementation work, not claimed as fixed by this document
 ## 8. Order capture and quote workspace (approved product requirement)
 
 ### User-approved configuration
-- Price resolution combines a maintained product price list, customer-specific prices, and clearly attributed historical prices found in prior conversation context.
+- Price resolution combines a maintained product price list and customer-specific prices. Customer-specific pricing takes precedence when a valid matching rule exists; otherwise use the applicable product price-list rule.
 - Quote persistence is manual: AI may prepare and populate a draft, but only the user can explicitly save it as a quote record.
 
 ### Primary flow
 1. Detect a customer-stated order/request in the active, authorized conversation context. Capture product, quantity, unit, currency, requested date and relevant conditions only when explicitly supported.
 2. Keep the detected request as a **customer order intent**, not a confirmed order or completed sale.
-3. Resolve the product and applicable price in this order: customer-specific price rule; matching product price-list rule; historical price explicitly stated/confirmed in prior conversation context. Historical conversation prices are evidence to review, not an unconditional current price override.
+3. Resolve the product and applicable price in this order: valid customer-specific price rule; otherwise the matching product price-list rule. Historical prices mentioned in chat are not an automatic price source and must not override the configured price rules; they may only be considered after a future explicit product decision and user confirmation.
 4. Price resolution must retain source, effective date/validity, currency, quantity tier, customer scope and confidence. If sources conflict, are expired, ambiguous, or missing, show “待確認價格”; never invent or silently choose a value.
 5. Calculate line totals and quote totals only from confirmed quantities and resolved/explicitly approved unit prices. Keep tax, shipping, discounts, payment terms and validity as separate explicit fields; do not assume them.
 6. Present an editable quote draft with a clear source trace for every resolved price. User reviews and edits it.
@@ -118,7 +118,7 @@ These are recorded as implementation work, not claimed as fixed by this document
 ### Quote fields and provenance
 - Customer identity (verified channel identity or explicitly confirmed customer).
 - Product/SKU and description; quantity and unit; unit price and currency; line total.
-- Price source: product price list, customer-specific price, or historical conversation reference; include source reference and effective/observed date.
+- Price source: product price list or customer-specific price rule; include source reference and effective date/validity.
 - Explicitly entered terms: discount, tax, shipping, payment terms, delivery terms, quote validity and notes.
 - Quote number, creation time, creator, status, revision history and saved state.
 - Missing or conflicting fields remain visibly unresolved; do not fill them with defaults that imply commercial agreement.
@@ -134,7 +134,7 @@ These are recorded as implementation work, not claimed as fixed by this document
 - Conversation/customer changed; unsaved draft is isolated and must not carry over to another customer.
 
 ### Implementation boundary
-The current MVP has no verified product-price catalog, customer price-rule resolver, historical-price resolver, or quote persistence API connected to the React dock. The first UI pass must therefore label these as pending integration and must not display sample prices as real data or claim a quote was saved. Implement the data contract and backend endpoints before enabling persistence.
+The current MVP has no verified product-price catalog, customer price-rule resolver, or quote persistence API connected to the React dock. The first UI pass must therefore label these as pending integration and must not display sample prices as real data or claim a quote was saved. Implement the data contract and backend endpoints before enabling persistence.
 
 ## 9. Acceptance checklist additions
 
