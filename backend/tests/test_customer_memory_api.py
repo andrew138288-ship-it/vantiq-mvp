@@ -1,4 +1,5 @@
-from app.models import CustomerIdentity, CustomerMemory, CustomerMemoryRevision, CustomerMemoryUpdateEvent
+import uuid
+from app.models import CustomerMemory, CustomerMemoryRevision, CustomerMemoryUpdateEvent
 from test_tenant_isolation import isolated_client
 
 
@@ -56,7 +57,7 @@ def test_customer_memory_requires_version_and_is_idempotent(isolated_client):
 
     db = session_factory()
     try:
-        assert db.query(CustomerMemory).filter_by(customer_id=customer_id).count() == 1
+        assert db.query(CustomerMemory).filter_by(customer_id=uuid.UUID(customer_id)).count() == 1
         assert db.query(CustomerMemoryRevision).filter_by(customer_id=customer_id).count() == 1
         assert db.query(CustomerMemoryUpdateEvent).filter_by(customer_id=customer_id).count() == 1
     finally:
