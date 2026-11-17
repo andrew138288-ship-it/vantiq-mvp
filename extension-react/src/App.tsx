@@ -586,7 +586,7 @@ export default function App({ onReadVisibleChat }: Props) {
             <div className="price-match-pending">
               <b>售價匹配</b>
               <strong>待確認價格</strong>
-              <p>后续自动匹配产品价格表、客户专属价格，并参考有明确来源和日期的历史对话价格。价格冲突、过期或缺失时必须由你确认。</p>
+              <p>后续自动匹配产品价格表与客户专属价格；客户专属有效价格优先。价格冲突、过期或缺失时必须由你确认。</p>
             </div>
             <div className="quote-total-row"><span>报价金额</span><b>待价格确认</b></div>
             <button className="primary full" disabled title="报价保存 API 尚未接入">手动保存报价单（接口开发中）</button>
